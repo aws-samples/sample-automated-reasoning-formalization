@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Benchmark Report — 2026-03-05T14:30:00</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
+<style>
+  :root {
+    --pass: #22c55e; --fail: #ef4444; --warn: #f59e0b;
+    --bg: #0f172a; --surface: #1e293b; --surface2: #334155;
+    --text: #e2e8f0; --text-muted: #94a3b8; --border: #475569;
+    --accent: #3b82f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+  h3 { font-size: 1rem; margin: 1.5rem 0 0.75rem; color: var(--text-muted); }
+  .subtitle { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+</style>
+<style>
+  /* Summary cards */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .summary-card { background: var(--surface); border-radius: 8px; padding: 1rem 1.25rem; border: 1px solid var(--border); }
+  .summary-card .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.25rem; }
+  .summary-card .value { font-size: 1.75rem; font-weight: 700; }
+  .summary-card .detail { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
+  .badge-pass { color: var(--pass); }
+  .badge-fail { color: var(--fail); }
+  .badge-warn { color: var(--warn); }
+
+  /* Charts */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+  .chart-container { background: var(--surface); border-radius: 8px; padding: 1.25rem; border: 1px solid var(--border); }
+  .chart-container.full-width { grid-column: 1 / -1; }
+  .chart-container h3 { margin-top: 0; }
+  canvas { max-height: 280px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 1.5rem; }
+  th, td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--surface2); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); position: sticky; top: 0; }
+  td { background: var(--surface); }
+  tr:hover td { background: var(--surface2); }
+
+  /* Heatmap cells */
+  .cell-pass { background: #166534; color: #bbf7d0; text-align: center; font-weight: 600; }
+  .cell-fail { background: #991b1b; color: #fecaca; text-align: center; font-weight: 600; }
+  .cell-na { background: var(--surface2); color: var(--text-muted); text-align: center; }
+
+  /* Judge scores */
+  .score-good { color: var(--pass); font-weight: 600; }
+  .score-warn { color: var(--warn); font-weight: 600; }
+  .score-bad { color: var(--fail); font-weight: 600; }
+
+  /* Collapsible raw data */
+  details { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem; }
+  summary { padding: 0.75rem 1rem; cursor: pointer; font-weight: 600; font-size: 0.85rem; color: var(--text-muted); }
+  summary:hover { color: var(--text); }
+  details > div { padding: 0 1rem 1rem; }
+  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; overflow-x: auto; font-size: 0.78rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  code { font-family: 'SF Mono', 'Fira Code', monospace; }
+</style>
+</head>
+<body>
+
+<h1>Agent Benchmark Report</h1>
+<div class="subtitle">
+  Run: 2026-03-05T14:30:00 &nbsp;·&nbsp; Fixture: expense-policy &nbsp;·&nbsp; Max iterations: 5 &nbsp;·&nbsp; Region: us-west-2
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SUMMARY CARDS                                                   -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="label">Tests Passing</div>
+    <div class="value badge-pass">6 / 6</div>
+    <div class="detail">4 fixed · 1 control (always passed) · 1 took 3 iterations</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Judge Score</div>
+    <div class="value badge-pass">4.2 / 5</div>
+    <div class="detail">4 generalizable · 0 overfitting</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Iterations</div>
+    <div class="value">3</div>
+    <div class="detail">of 5 max</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Total Time</div>
+    <div class="value">18m 42s</div>
+    <div class="detail">Setup: 3m 15s · Loop: 14m 12s · Eval: 1m 15s</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Tool Calls</div>
+    <div class="value">9</div>
+    <div class="detail">3 add_rules · 2 add_variables · 1 update_variables · 3 execute_tests</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Build Errors</div>
+    <div class="value badge-pass">0</div>
+    <div class="detail">No failed annotations</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">No-Op Iterations</div>
+    <div class="value">0</div>
+    <div class="detail">Agent proposed every iteration</div>
+  </div>
+</div>
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- CHARTS                                                          -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<h2>Convergence &amp; Performance</h2>
+
+<div class="chart-grid">
+  <div class="chart-container">
+    <h3>Tests Passing Over Time</h3>
+    <canvas id="testsPassingChart"></canvas>
+  </div>
+  <div class="chart-container">
+    <h3>Per-Iteration Latency</h3>
+    <canvas id="latencyChart"></canvas>
+  </div>
+  <div class="chart-container full-width">
+    <h3>Per-Test Convergence (iteration when test first passed)</h3>
+    <canvas id="convergenceChart"></canvas>
+  </div>
+</div>
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- ITERATION LOG TABLE                                             -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<h2>Iteration Log</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Prompt Summary</th>
+      <th>Proposal</th>
+      <th>Tool Calls</th>
+      <th>Tests Passing</th>
+      <th>Tests Failing</th>
+      <th>Latency</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td><em>Baseline — no agent prompt</em></td>
+      <td class="cell-na">—</td>
+      <td>execute_tests</td>
+      <td>2 / 6</td>
+      <td>4 / 6</td>
+      <td>1m 48s</td>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td>"4 of 6 tests are failing. The failures are: $50 auto-approve (VALID expected, got INVALID), $100 auto-approve (VALID expected, got INVALID), $3K finance (INVALID expected, got VALID), $800 international (NO_TRANSLATIONS). Please analyze and fix."</td>
+      <td>✅ Proposal: Fix auto-approve implication + fix finance threshold</td>
+      <td>add_rules ×2, execute_tests</td>
+      <td>4 / 6</td>
+      <td>2 / 6</td>
+      <td>5m 22s</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>"2 tests still failing: $800 international travel (NO_TRANSLATIONS — no variable for international travel), $500 reimbursement timing (TRANSLATION_AMBIGUOUS). Please fix."</td>
+      <td>✅ Proposal: Add isInternational variable + rule, update reimbursementDays description</td>
+      <td>add_variables, add_rules, update_variables, execute_tests</td>
+      <td>5 / 6</td>
+      <td>1 / 6</td>
+      <td>4m 55s</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>"1 test still failing: $500 reimbursement in 5 days (TRANSLATION_AMBIGUOUS). The variable description was updated but translation is still ambiguous. Consider adding explicit rules for the two reimbursement tiers."</td>
+      <td>✅ Proposal: Add two reimbursement timing rules</td>
+      <td>add_rules, execute_tests</td>
+      <td>6 / 6</td>
+      <td>0 / 6</td>
+      <td>3m 55s</td>
+    </tr>
+  </tbody>
+</table>
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- PER-TEST RESULTS HEATMAP                                        -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<h2>Per-Test Results</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Test</th>
+      <th>Expected</th>
+      <th>Target</th>
+      <th>Baseline</th>
+      <th>Iter 1</th>
+      <th>Iter 2</th>
+      <th>Iter 3</th>
+      <th>First Passed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>$50 expense auto-approved</td>
+      <td>VALID</td>
+      <td>D1</td>
+      <td class="cell-fail">FAIL</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td>Iteration 1</td>
+    </tr>
+    <tr>
+      <td>$100 expense auto-approved</td>
+      <td>VALID</td>
+      <td>D1</td>
+      <td class="cell-fail">FAIL</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td>Iteration 1</td>
+    </tr>
+    <tr>
+      <td>$3,000 no finance approval</td>
+      <td>INVALID</td>
+      <td>D2</td>
+      <td class="cell-fail">FAIL</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td>Iteration 1</td>
+    </tr>
+    <tr>
+      <td>$7,500 needs finance approval</td>
+      <td>VALID</td>
+      <td>D2 (control)</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td>Baseline</td>
+    </tr>
+    <tr>
+      <td>$800 international finance approval</td>
+      <td>VALID</td>
+      <td>D3</td>
+      <td class="cell-fail">FAIL</td>
+      <td class="cell-fail">FAIL</td>
+      <td class="cell-pass">PASS</td>
+      <td class="cell-pass">PASS</td>
+      <td>Iteration 2</td>
+    </tr>
+    <tr>
+      <td>$500 reimbursed in 5 days</td>
+      <td>VALID</td>
+      <td>D4</td>
+      <td class="cell-fail">FAIL</td>
+      <td class="cell-fail">FAIL</td>
+      <td class="cell-fail">FAIL</td>
+      <td class="cell-pass">PASS</td>
+      <td>Iteration 3</td>
+    </tr>
+  </tbody>
+</table>
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- LLM JUDGE ASSESSMENTS                                           -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<h2>LLM-as-Judge Evaluation</h2>
+
+<p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">
+  Each policy change was evaluated for generalizability by a separate LLM judge (temperature 0.1, structured JSON output).
+  The judge assessed whether fixes address root causes or overfit to specific test text.
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Change</th>
+      <th>Iteration</th>
+      <th>Generalizability</th>
+      <th>Paraphrase Robustness</th>
+      <th>Root Cause</th>
+      <th>Reasoning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Reversed auto-approve implication:<br><code>(=> (&lt;= expenseAmount 100) autoApproved)</code></td>
+      <td>1</td>
+      <td class="score-good">Generalizable</td>
+      <td class="score-good">Robust</td>
+      <td class="score-good">✓ Yes</td>
+      <td>The fix correctly reverses the implication direction. The original rule said "if auto-approved then amount ≤ 100" which is logically backwards — it should be "if amount ≤ 100 then auto-approved." This fix addresses the root cause (wrong implication direction) and would work for any expense amount ≤ $100, not just the specific test values of $50 and $100. Paraphrased inputs like "a $75 office supply purchase is automatically approved" would also be correctly handled.</td>
+    </tr>
+    <tr>
+      <td>Updated finance threshold:<br><code>(=> (> expenseAmount 5000) requiresFinanceApproval)</code></td>
+      <td>1</td>
+      <td class="score-good">Generalizable</td>
+      <td class="score-good">Robust</td>
+      <td class="score-good">✓ Yes</td>
+      <td>The fix changes the threshold from 1000 to 5000, matching the source document's stated policy. This is a direct correction of a factual error, not a test-specific workaround. The $7,500 control test continues to pass, confirming the fix didn't over-correct. Paraphrased inputs like "a $4,200 equipment purchase does not need finance sign-off" would be correctly handled.</td>
+    </tr>
+    <tr>
+      <td>Added variable <code>isInternational</code> + rule:<br><code>(=> isInternational requiresFinanceApproval)</code></td>
+      <td>2</td>
+      <td class="score-good">Generalizable</td>
+      <td class="score-good">Robust</td>
+      <td class="score-good">✓ Yes</td>
+      <td>The fix adds a missing variable and a rule that captures the source document's requirement that international travel always requires finance approval regardless of amount. The variable description is rich enough ("Whether the travel expense is for international travel, i.e., travel outside the employee's home country") to handle paraphrased inputs like "overseas business trip" or "flight to London for a conference." Root cause (missing concept in the policy) is fully addressed.</td>
+    </tr>
+    <tr>
+      <td>Added reimbursement timing rules:<br><code>(=> (&lt; expenseAmount 1000) (= reimbursementDays 5))</code><br><code>(=> (>= expenseAmount 1000) (= reimbursementDays 15))</code></td>
+      <td>3</td>
+      <td class="score-warn">Unclear</td>
+      <td class="score-warn">Fragile</td>
+      <td class="score-warn">~ Partial</td>
+      <td>The fix adds explicit rules for the two reimbursement tiers, which is correct. However, the variable description for reimbursementDays was also updated in iteration 2 but that alone wasn't sufficient — the agent had to add rules as a second attempt. The rules themselves are generalizable, but the approach of adding rules rather than improving the description suggests the agent may not have fully diagnosed the TRANSLATION_AMBIGUOUS root cause. Paraphrased inputs like "how long until my $200 lunch receipt is paid back" might still fail if the translation layer can't map "paid back" to reimbursementDays.</td>
+    </tr>
+  </tbody>
+</table>
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- RAW DATA — COLLAPSIBLE SECTIONS                                 -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<h2>Raw Data</h2>
+
+<details>
+  <summary>Iteration 0 — Baseline Test Results</summary>
+  <div>
+    <pre><code>{
+  "iteration": 0,
+  "timestamp": "2026-03-05T14:33:15.000Z",
+  "latencyMs": 108000,
+  "testResults": [
+    {
+      "testCaseId": "tc-001",
+      "guardContent": "An employee submits a $50 expense report. The expense is automatically approved without any manager review.",
+      "queryContent": "Is a $50 expense automatically approved?",
+      "expectedResult": "VALID",
+      "actualResult": "INVALID",
+      "passed": false,
+      "findings": [
+        {
+          "findingType": "TRANSLATION_RESULT",
+          "result": "INVALID",
+          "translations": [
+            { "variableName": "expenseAmount", "assignedValue": "50", "source": "PREMISE" },
+            { "variableName": "autoApproved", "assignedValue": "true", "source": "CLAIM" }
+          ],
+          "supportingRules": [],
+          "contradictingRules": ["RULE_AUTO_APPROVE"]
+        }
+      ]
+    },
+    {
+      "testCaseId": "tc-002",
+      "guardContent": "An employee submits a $100 expense. It does not require manager approval and is automatically reimbursed.",
+      "queryContent": "Is a $100 expense auto-approved?",
+      "expectedResult": "VALID",
+      "actualResult": "INVALID",
+      "passed": false,
+      "findings": [
+        {
+          "findingType": "TRANSLATION_RESULT",
+          "result": "INVALID",
+          "translations": [
+            { "variableName": "expenseAmount", "assignedValue": "100", "source": "PREMISE" },
+            { "variableName": "autoApproved", "assignedValue": "true", "source": "CLAIM" }
+          ],
+          "contradictingRules": ["RULE_AUTO_APPROVE"]
+        }
+      ]
+    },
+    {
+      "testCaseId": "tc-003",
+      "guardContent": "An employee submits a $3,000 expense. It requires manager approval but does not require finance department approval.",
+      "queryContent": "Does a $3,000 expense need finance approval?",
+      "expectedResult": "INVALID",
+      "actualResult": "VALID",
+      "passed": false,
+      "findings": [
+        {
+          "findingType": "TRANSLATION_RESULT",
+          "result": "VALID",
+          "translations": [
+            { "variableName": "expenseAmount", "assignedValue": "3000", "source": "PREMISE" },
+            { "variableName": "requiresFinanceApproval", "assignedValue": "true", "source": "CLAIM" }
+          ],
+          "supportingRules": ["RULE_FINANCE_APPROVAL"]
+        }
+      ]
+    },
+    {
+      "testCaseId": "tc-004",
+      "guardContent": "An employee submits a $7,500 expense for a conference. It requires both manager approval and finance department approval.",
+      "queryContent": "Does a $7,500 expense require finance approval?",
+      "expectedResult": "VALID",
+      "actualResult": "VALID",
+      "passed": true,
+      "findings": [
+        {
+          "findingType": "TRANSLATION_RESULT",
+          "result": "VALID",
+          "supportingRules": ["RULE_FINANCE_APPROVAL"]
+        }
+      ]
+    },
+    {
+      "testCaseId": "tc-005",
+      "guardContent": "An employee books an international flight for $800. International travel expenses require finance department approval regardless of the amount.",
+      "queryContent": "Does an $800 international travel expense require finance approval?",
+      "expectedResult": "VALID",
+      "actualResult": "NO_TRANSLATIONS",
+      "passed": false,
+      "findings": [
+        {
+          "findingType": "NO_TRANSLATIONS",
+          "message": "Could not translate the input text into policy variables. The concept 'international' does not map to any known variable."
+        }
+      ]
+    },
+    {
+      "testCaseId": "tc-006",
+      "guardContent": "An approved expense of $500 is reimbursed within 5 business days.",
+      "queryContent": "How quickly is a $500 approved expense reimbursed?",
+      "expectedResult": "VALID",
+      "actualResult": "TRANSLATION_AMBIGUOUS",
+      "passed": false,
+      "findings": [
+        {
+          "findingType": "TRANSLATION_AMBIGUOUS",
+          "message": "Multiple possible translations for '5 business days' — variable 'reimbursementDays' description is too vague to determine the correct mapping."
+        }
+      ]
+    }
+  ]
+}</code></pre>
+  </div>
+</details>
+
+<details>
+  <summary>Iteration 1 — Agent Response &amp; Tool Calls</summary>
+  <div>
+    <h3>Prompt Sent</h3>
+    <pre><code>4 of 6 tests are failing after the baseline run. Here are the failures:
+
+1. "$50 expense auto-approved" — Expected VALID, got INVALID.
+   Finding: contradictingRules includes RULE_AUTO_APPROVE.
+   The rule (=> autoApproved (<= expenseAmount 100)) has the implication reversed.
+
+2. "$100 expense auto-approved" — Expected VALID, got INVALID.
+   Same root cause as test 1.
+
+3. "$3,000 no finance approval" — Expected INVALID, got VALID.
+   Finding: supportingRules includes RULE_FINANCE_APPROVAL.
+   The rule uses threshold 1000 but the source document says 5000.
+
+4. "$800 international travel" — Expected VALID, got NO_TRANSLATIONS.
+   The concept "international" has no corresponding variable in the policy.
+
+Please analyze these failures and propose fixes for the most impactful issues first.</code></pre>
+
+    <h3>Agent Response (prose, cards removed)</h3>
+    <pre><code>I can see two clear issues that are causing 3 of the 4 failures:
+
+1. The auto-approval rule has its logic reversed. It currently says "if the expense is
+   auto-approved, then the amount is $100 or less" — but it should say "if the amount
+   is $100 or less, then the expense is auto-approved." I'll fix this by replacing the
+   rule with the correct direction.
+
+2. The finance approval threshold is wrong. The rule triggers finance approval for
+   expenses over $1,000, but your policy document says it should be $5,000. I'll
+   update this threshold.
+
+Let me propose both fixes together.</code></pre>
+
+    <h3>Proposal Card Emitted</h3>
+    <pre><code>{
+  "type": "proposal",
+  "title": "Fix auto-approve direction and finance threshold",
+  "description": "Two changes: (1) Reverse the auto-approve rule so expenses ≤$100 are auto-approved, (2) Update finance threshold from $1,000 to $5,000",
+  "changes": [
+    {
+      "label": "Auto-approve rule",
+      "before": "(=> autoApproved (<= expenseAmount 100))",
+      "after": "(=> (<= expenseAmount 100) autoApproved)"
+    },
+    {
+      "label": "Finance approval threshold",
+      "before": "(=> (> expenseAmount 1000) requiresFinanceApproval)",
+      "after": "(=> (> expenseAmount 5000) requiresFinanceApproval)"
+    }
+  ],
+  "approvePrompt": "Apply the two rule fixes: reverse auto-approve implication and update finance threshold to 5000."
+}</code></pre>
+
+    <h3>Tool Calls</h3>
+    <pre><code>[
+  {
+    "tool": "add_rules",
+    "status": "success",
+    "input": {
+      "policyArn": "arn:aws:bedrock:us-west-2:123456789012:automated-reasoning-policy/benchmark-20260305143000",
+      "approvalCode": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "rules": [
+        { "expression": "(=> (<= expenseAmount 100) autoApproved)" }
+      ]
+    },
+    "latencyMs": 185000,
+    "buildErrors": []
+  },
+  {
+    "tool": "add_rules",
+    "status": "success",
+    "input": {
+      "policyArn": "arn:aws:bedrock:us-west-2:123456789012:automated-reasoning-policy/benchmark-20260305143000",
+      "approvalCode": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "rules": [
+        { "expression": "(=> (> expenseAmount 5000) requiresFinanceApproval)" }
+      ]
+    },
+    "latencyMs": 192000,
+    "buildErrors": []
+  },
+  {
+    "tool": "execute_tests",
+    "status": "success",
+    "input": {
+      "policyArn": "arn:aws:bedrock:us-west-2:123456789012:automated-reasoning-policy/benchmark-20260305143000",
+      "testCaseIds": ["tc-001", "tc-002", "tc-003", "tc-004", "tc-005", "tc-006"]
+    },
+    "latencyMs": 45000
+  }
+]</code></pre>
+
+    <h3>Test Results After Iteration 1</h3>
+    <pre><code>tc-001 ($50 auto-approve):       PASS ✓  (was FAIL)
+tc-002 ($100 auto-approve):      PASS ✓  (was FAIL)
+tc-003 ($3K no finance):         PASS ✓  (was FAIL)
+tc-004 ($7.5K finance):          PASS ✓  (still passing — control OK)
+tc-005 ($800 international):     FAIL ✗  (still NO_TRANSLATIONS)
+tc-006 ($500 reimbursement):     FAIL ✗  (still TRANSLATION_AMBIGUOUS)</code></pre>
+  </div>
+</details>
+
+<details>
+  <summary>Iteration 2 — Agent Response &amp; Tool Calls</summary>
+  <div>
+    <h3>Prompt Sent</h3>
+    <pre><code>Good progress — 4 of 6 tests now pass. 2 tests still failing:
+
+1. "$800 international travel" — Expected VALID, got NO_TRANSLATIONS.
+   The policy has no variable representing whether travel is international.
+   The source document says: "International travel expenses are reimbursed at 100%
+   of the approved amount, but require finance department approval regardless of the amount."
+
+2. "$500 reimbursement in 5 days" — Expected VALID, got TRANSLATION_AMBIGUOUS.
+   The variable reimbursementDays has description "Days for reimbursement" which is
+   too vague. The source document specifies two tiers: under $1,000 = 5 days,
+   $1,000+ = 15 days.
+
+Please fix both issues.</code></pre>
+
+    <h3>Agent Response (prose, cards removed)</h3>
+    <pre><code>I see two different issues here:
+
+1. For the international travel test, the policy simply doesn't have a way to
+   represent "international" travel. I need to add a new variable and a rule
+   connecting it to finance approval.
+
+2. For the reimbursement timing, the variable description is too vague for the
+   translation layer to work with. I'll update it with specific details about
+   the two reimbursement tiers.
+
+Let me propose these changes.</code></pre>
+
+    <h3>Tool Calls</h3>
+    <pre><code>[
+  {
+    "tool": "add_variables",
+    "status": "success",
+    "input": {
+      "variables": [
+        {
+          "name": "isInternational",
+          "type": "BOOL",
+          "description": "Whether the travel expense is for international travel, i.e., travel outside the employee's home country. Synonyms: overseas trip, foreign travel, travel abroad, international flight, cross-border travel."
+        }
+      ]
+    },
+    "latencyMs": 178000,
+    "buildErrors": []
+  },
+  {
+    "tool": "add_rules",
+    "status": "success",
+    "input": {
+      "rules": [
+        { "expression": "(=> isInternational requiresFinanceApproval)" }
+      ]
+    },
+    "latencyMs": 185000,
+    "buildErrors": []
+  },
+  {
+    "tool": "update_variables",
+    "status": "success",
+    "input": {
+      "variables": [
+        {
+          "name": "reimbursementDays",
+          "description": "The number of business days after approval before the expense is reimbursed. Two tiers: expenses under $1,000 are reimbursed within 5 business days; expenses of $1,000 or more are reimbursed within 15 business days. Synonyms: reimbursement timeline, payment processing time, how long until reimbursed, days to get paid back."
+        }
+      ]
+    },
+    "latencyMs": 172000,
+    "buildErrors": []
+  },
+  {
+    "tool": "execute_tests",
+    "status": "success",
+    "latencyMs": 42000
+  }
+]</code></pre>
+
+    <h3>Test Results After Iteration 2</h3>
+    <pre><code>tc-001 ($50 auto-approve):       PASS ✓
+tc-002 ($100 auto-approve):      PASS ✓
+tc-003 ($3K no finance):         PASS ✓
+tc-004 ($7.5K finance):          PASS ✓
+tc-005 ($800 international):     PASS ✓  (was FAIL — fixed!)
+tc-006 ($500 reimbursement):     FAIL ✗  (still TRANSLATION_AMBIGUOUS)</code></pre>
+  </div>
+</details>
+
+<details>
+  <summary>Iteration 3 — Agent Response &amp; Tool Calls</summary>
+  <div>
+    <h3>Prompt Sent</h3>
+    <pre><code>5 of 6 tests now pass. 1 test still failing:
+
+1. "$500 reimbursement in 5 days" — Expected VALID, got TRANSLATION_AMBIGUOUS.
+   The variable description was updated in the previous iteration but the translation
+   layer is still ambiguous. The source document says: "Approved expenses under $1,000
+   are reimbursed within 5 business days. Approved expenses of $1,000 or more are
+   reimbursed within 15 business days."
+
+   Consider adding explicit rules that set reimbursementDays based on the expense amount.</code></pre>
+
+    <h3>Agent Response (prose, cards removed)</h3>
+    <pre><code>The description update alone wasn't enough — the translation layer needs concrete
+rules to determine the reimbursement timeline based on the expense amount. I'll add
+two rules that explicitly set the reimbursement days for each tier.</code></pre>
+
+    <h3>Tool Calls</h3>
+    <pre><code>[
+  {
+    "tool": "add_rules",
+    "status": "success",
+    "input": {
+      "rules": [
+        { "expression": "(=> (< expenseAmount 1000) (= reimbursementDays 5))" },
+        { "expression": "(=> (>= expenseAmount 1000) (= reimbursementDays 15))" }
+      ]
+    },
+    "latencyMs": 190000,
+    "buildErrors": []
+  },
+  {
+    "tool": "execute_tests",
+    "status": "success",
+    "latencyMs": 40000
+  }
+]</code></pre>
+
+    <h3>Test Results After Iteration 3</h3>
+    <pre><code>tc-001 ($50 auto-approve):       PASS ✓
+tc-002 ($100 auto-approve):      PASS ✓
+tc-003 ($3K no finance):         PASS ✓
+tc-004 ($7.5K finance):          PASS ✓
+tc-005 ($800 international):     PASS ✓
+tc-006 ($500 reimbursement):     PASS ✓  (was FAIL — fixed!)
+
+ALL TESTS PASSING — benchmark converged in 3 iterations.</code></pre>
+  </div>
+</details>
+
+<details>
+  <summary>LLM Judge — Full Evaluation Responses</summary>
+  <div>
+    <h3>Judge Configuration</h3>
+    <pre><code>Model: anthropic.claude-3-5-sonnet-20241022-v2:0
+Temperature: 0.1
+Output mode: Structured JSON
+Evaluation criteria: generalizability, paraphrase robustness, root cause analysis</code></pre>
+
+    <h3>Change 1: Reverse auto-approve implication</h3>
+    <pre><code>{
+  "changeDescription": "Replaced rule (=> autoApproved (<= expenseAmount 100)) with (=> (<= expenseAmount 100) autoApproved)",
+  "generalizability": "generalizable",
+  "paraphraseRobustness": "robust",
+  "rootCauseAddressed": true,
+  "reasoning": "The fix correctly reverses the implication direction. Tested against paraphrases: 'a $75 office supply purchase is automatically approved' → VALID ✓, 'a small $20 parking fee needs no approval' → VALID ✓, 'my $99.99 software subscription was auto-approved' → VALID ✓. All paraphrases would be correctly handled by the new rule."
+}</code></pre>
+
+    <h3>Change 2: Update finance threshold</h3>
+    <pre><code>{
+  "changeDescription": "Replaced rule (=> (> expenseAmount 1000) requiresFinanceApproval) with (=> (> expenseAmount 5000) requiresFinanceApproval)",
+  "generalizability": "generalizable",
+  "paraphraseRobustness": "robust",
+  "rootCauseAddressed": true,
+  "reasoning": "Direct correction of a factual error — threshold changed from 1000 to 5000 to match source document. Tested against paraphrases: 'a $2,500 training course only needs manager sign-off' → correctly no finance approval ✓, 'a $4,999 laptop purchase doesn't need finance review' → correctly no finance approval ✓, 'a $6,000 conference registration needs finance approval' → correctly triggers finance ✓. The $7,500 control test continues to pass."
+}</code></pre>
+
+    <h3>Change 3: Add isInternational variable + rule</h3>
+    <pre><code>{
+  "changeDescription": "Added variable isInternational (BOOL) with rich description and rule (=> isInternational requiresFinanceApproval)",
+  "generalizability": "generalizable",
+  "paraphraseRobustness": "robust",
+  "rootCauseAddressed": true,
+  "reasoning": "The variable description includes synonyms (overseas, foreign, abroad, cross-border) which should help the translation layer handle varied phrasings. Tested against paraphrases: 'an overseas business trip costing $400 needs finance approval' → should translate 'overseas' to isInternational=true ✓, 'a flight to Tokyo for $1,200 requires finance sign-off' → 'Tokyo' implies international, though this depends on translation quality. The rule itself is clean and matches the source document's unconditional requirement."
+}</code></pre>
+
+    <h3>Change 4: Add reimbursement timing rules</h3>
+    <pre><code>{
+  "changeDescription": "Added rules (=> (< expenseAmount 1000) (= reimbursementDays 5)) and (=> (>= expenseAmount 1000) (= reimbursementDays 15))",
+  "generalizability": "unclear",
+  "paraphraseRobustness": "fragile",
+  "rootCauseAddressed": false,
+  "reasoning": "The rules correctly encode the two reimbursement tiers, but the approach of adding rules was a second attempt after the description update in iteration 2 failed. This suggests the agent didn't fully diagnose why TRANSLATION_AMBIGUOUS persisted. Tested against paraphrases: 'how long until my $200 lunch receipt is paid back' → depends on whether 'paid back' maps to reimbursementDays (fragile), 'when will I receive my $3,000 hotel reimbursement' → 'receive reimbursement' should map correctly ✓. The rules themselves are sound, but the variable description may still need work for edge-case phrasings."
+}</code></pre>
+
+    <h3>Overall Assessment</h3>
+    <pre><code>{
+  "overallScore": 4.2,
+  "summary": "The agent correctly identified and fixed 3 of 4 deficiencies on the first attempt for each. The auto-approve reversal and finance threshold fix were clean, root-cause corrections. The international travel fix was well-executed with a rich variable description. The reimbursement timing fix required two iterations — the initial description update was insufficient, and the agent fell back to adding explicit rules. While the rules are correct, this suggests the agent's diagnostic process for TRANSLATION_AMBIGUOUS could be improved. Overall, the fixes are generalizable and would handle real-world paraphrased inputs well."
+}</code></pre>
+  </div>
+</details>
+
+<details>
+  <summary>Policy Definition — Before &amp; After</summary>
+  <div>
+    <h3>Rules Added</h3>
+    <pre><code>+ (=> (<= expenseAmount 100) autoApproved)                          [iter 1 — replaced reversed implication]
++ (=> (> expenseAmount 5000) requiresFinanceApproval)               [iter 1 — replaced wrong threshold]
++ (=> isInternational requiresFinanceApproval)                      [iter 2 — new rule for international travel]
++ (=> (< expenseAmount 1000) (= reimbursementDays 5))              [iter 3 — reimbursement tier 1]
++ (=> (>= expenseAmount 1000) (= reimbursementDays 15))            [iter 3 — reimbursement tier 2]</code></pre>
+
+    <h3>Variables Added</h3>
+    <pre><code>+ isInternational (BOOL): "Whether the travel expense is for international travel,
+  i.e., travel outside the employee's home country. Synonyms: overseas trip, foreign
+  travel, travel abroad, international flight, cross-border travel."</code></pre>
+
+    <h3>Variables Updated</h3>
+    <pre><code>~ reimbursementDays: "Days for reimbursement."
+  → "The number of business days after approval before the expense is reimbursed.
+     Two tiers: expenses under $1,000 are reimbursed within 5 business days;
+     expenses of $1,000 or more are reimbursed within 15 business days.
+     Synonyms: reimbursement timeline, payment processing time, how long until
+     reimbursed, days to get paid back."</code></pre>
+
+    <h3>Final Rule Count</h3>
+    <pre><code>Original: 9 rules, 11 variables, 0 types
+Final:    14 rules, 12 variables, 0 types  (+5 rules, +1 variable, 1 variable updated)</code></pre>
+  </div>
+</details>
+
+<details>
+  <summary>Benchmark Metadata</summary>
+  <div>
+    <pre><code>{
+  "benchmarkVersion": "1.0.0",
+  "runId": "benchmark-20260305143000",
+  "startTime": "2026-03-05T14:30:00.000Z",
+  "endTime": "2026-03-05T14:48:42.000Z",
+  "fixture": "expense-policy",
+  "config": {
+    "maxIterations": 5,
+    "perTurnTimeoutMs": 600000,
+    "globalTimeoutMs": 3600000,
+    "skipJudge": false,
+    "region": "us-west-2"
+  },
+  "environment": {
+    "kiroCliVersion": "1.4.2",
+    "nodeVersion": "v20.11.0",
+    "platform": "darwin-arm64"
+  },
+  "ephemeralPolicy": {
+    "policyArn": "arn:aws:bedrock:us-west-2:123456789012:automated-reasoning-policy/benchmark-20260305143000",
+    "createdAt": "2026-03-05T14:30:02.000Z",
+    "deletedAt": "2026-03-05T14:48:40.000Z"
+  },
+  "timing": {
+    "setupMs": 195000,
+    "baselineMs": 108000,
+    "agentLoopMs": 852000,
+    "judgeEvaluationMs": 75000,
+    "teardownMs": 12000,
+    "totalMs": 1122000
+  }
+}</code></pre>
+  </div>
+</details>
+</code>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- CHART.JS INITIALIZATION                                         -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<script>
+const CHART_DEFAULTS = {
+  color: '#94a3b8',
+  borderColor: '#475569',
+  font: { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }
+};
+Chart.defaults.color = CHART_DEFAULTS.color;
+Chart.defaults.font.family = CHART_DEFAULTS.font.family;
+
+// ── Tests Passing Over Time ──
+new Chart(document.getElementById('testsPassingChart'), {
+  type: 'line',
+  data: {
+    labels: ['Baseline', 'Iter 1', 'Iter 2', 'Iter 3'],
+    datasets: [{
+      label: 'Tests Passing',
+      data: [2, 4, 5, 6],
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59, 130, 246, 0.1)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 6,
+      pointBackgroundColor: '#3b82f6',
+    }, {
+      label: 'Total Tests',
+      data: [6, 6, 6, 6],
+      borderColor: '#475569',
+      borderDash: [5, 5],
+      pointRadius: 0,
+      fill: false,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom' },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 7,
+        ticks: { stepSize: 1 },
+        grid: { color: '#1e293b' },
+      },
+      x: { grid: { color: '#1e293b' } }
+    }
+  }
+});
+
+// ── Per-Iteration Latency ──
+new Chart(document.getElementById('latencyChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Baseline', 'Iter 1', 'Iter 2', 'Iter 3'],
+    datasets: [{
+      label: 'Agent + Build (s)',
+      data: [0, 280, 253, 195],
+      backgroundColor: '#3b82f6',
+    }, {
+      label: 'Test Execution (s)',
+      data: [108, 42, 42, 40],
+      backgroundColor: '#22c55e',
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom' },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: 'Seconds' },
+        grid: { color: '#1e293b' },
+        stacked: true,
+      },
+      x: {
+        grid: { color: '#1e293b' },
+        stacked: true,
+      }
+    }
+  }
+});
+
+// ── Per-Test Convergence ──
+new Chart(document.getElementById('convergenceChart'), {
+  type: 'bar',
+  data: {
+    labels: [
+      '$50 auto-approve',
+      '$100 auto-approve',
+      '$3K no finance',
+      '$7.5K finance (control)',
+      '$800 international',
+      '$500 reimbursement'
+    ],
+    datasets: [{
+      label: 'First passed at iteration',
+      data: [1, 1, 1, 0, 2, 3],
+      backgroundColor: [
+        '#3b82f6', '#3b82f6', '#3b82f6',
+        '#22c55e',
+        '#f59e0b',
+        '#ef4444'
+      ],
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const v = ctx.raw;
+            return v === 0 ? 'Passed at baseline' : `First passed at iteration ${v}`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        max: 5,
+        ticks: { stepSize: 1 },
+        title: { display: true, text: 'Iteration' },
+        grid: { color: '#1e293b' },
+      },
+      y: { grid: { display: false } }
+    }
+  }
+});
+</script>
+
+</body>
+</html>

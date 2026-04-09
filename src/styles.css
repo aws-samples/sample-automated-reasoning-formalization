@@ -1,0 +1,650 @@
+/* ── Reset & base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Map legacy custom properties to Cloudscape design tokens.
+   This lets all existing var(--bg) etc. references pick up Cloudscape
+   dark mode values without touching hundreds of individual rules. */
+:root {
+  --bg: var(--color-background-layout-main, #0f1b2a);
+  --surface: var(--color-background-container-content, #192534);
+  --surface-hover: var(--color-background-container-header, #1a2b3c);
+  --border: var(--color-border-divider-default, #354150);
+  --text: var(--color-text-body-default, #d1d5db);
+  --text-muted: var(--color-text-body-secondary, #8d99a8);
+  --primary: var(--color-text-accent, #539fe5);
+  --primary-hover: var(--color-text-link-hover, #89bceb);
+  --success: var(--color-text-status-success, #29ad32);
+  --error: var(--color-text-status-error, #eb6f6f);
+  --radius: 8px;
+  --font: var(--font-family-base, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+}
+
+html, body, #app { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text); }
+
+/* ── Window drag region (frameless title bar) ── */
+.titlebar {
+  -webkit-app-region: drag;
+  height: 38px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.titlebar button, .titlebar input, .titlebar a { -webkit-app-region: no-drag; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); border: 0;
+}
+
+#app { display: flex; flex-direction: column; }
+
+/* ── Buttons ── */
+.btn {
+  padding: 0.6rem 1.4rem; border: none; border-radius: var(--radius);
+  font-size: 0.95rem; cursor: pointer; transition: background 0.15s;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--surface-hover); }
+.btn-icon {
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 1rem; padding: 0.25rem;
+}
+
+/* ── Workspace layout (panel styles used by legacy imperative components) ── */
+.panel { display: flex; flex-direction: column; overflow: hidden; }
+
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+  background: var(--surface); font-weight: 600; font-size: 0.9rem;
+  min-height: 3.2rem; box-sizing: border-box;
+  transition: padding-left 0.2s ease;
+  -webkit-app-region: drag;
+}
+/* macOS traffic light clearance for the leftmost visible panel */
+.platform-macos .panel-header-traffic-light-inset {
+  padding-left: 78px;
+}
+
+/* CLI error notification bar — needs traffic light clearance on macOS */
+.platform-macos .cli-error-bar {
+  padding-left: 78px;
+}
+.panel-header button, .panel-header .chat-context-indicator { -webkit-app-region: no-drag; }
+
+/* ── Panel expand buttons (shown in chat header when panels are collapsed) ── */
+.panel-expand-buttons { display: flex; gap: 0.25rem; flex-shrink: 0; margin-right: 0.5rem; }
+.panel-expand-btn { display: inline-flex; align-items: center; gap: 0.2rem; }
+.panel-expand-label { font-size: 0.78rem; }
+.panel-body { flex: 1; overflow-y: auto; padding: 1rem; }
+
+.panel-divider {
+  width: 4px; cursor: col-resize; background: var(--border);
+  transition: background 0.15s;
+}
+.panel-divider:hover { background: var(--primary); }
+
+/* ── Chat context indicator ── */
+.chat-context-indicator { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.chat-back-btn {
+  font-size: 1rem; padding: 0.15rem 0.4rem; border-radius: var(--radius);
+  border: 1px solid var(--border); background: transparent; color: var(--text-muted);
+  cursor: pointer; line-height: 1; flex-shrink: 0;
+}
+.chat-back-btn:hover { background: var(--surface); color: var(--text); }
+.chat-context-label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 0.9rem; font-weight: 600; color: var(--text);
+}
+.chat-context-label.context-test { color: var(--primary); }
+
+#btn-copy-chat { font-size: 1rem; flex-shrink: 0; -webkit-app-region: no-drag; }
+#btn-copy-chat:hover { color: var(--text); }
+
+/* ── Policy picker table — make rows look clickable ── */
+.policy-picker-table tr[class*="row"] {
+  cursor: pointer;
+}
+.policy-picker-table tr[class*="row"]:hover td {
+  background: var(--surface-hover);
+}
+
+/* ── Chat messages ── */
+#chat-messages { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.chat-msg {
+  max-width: 80%; padding: 0.75rem 1rem; border-radius: var(--radius);
+  line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap;
+}
+.chat-msg.user { align-self: flex-end; background: var(--primary); color: #fff; }
+.chat-msg.assistant { align-self: flex-start; background: var(--surface); }
+
+/* ── Markdown inside chat bubbles ── */
+.chat-msg.markdown-body { white-space: normal; }
+.chat-msg.markdown-body p { margin: 0 0 0.5em; }
+.chat-msg.markdown-body p:last-child { margin-bottom: 0; }
+.chat-msg.markdown-body ul,
+.chat-msg.markdown-body ol { margin: 0.25em 0 0.5em 1.25em; padding: 0; }
+.chat-msg.markdown-body li { margin-bottom: 0.2em; }
+.chat-msg.markdown-body strong { font-weight: 600; }
+.chat-msg.markdown-body em { font-style: italic; }
+.chat-msg.markdown-body code {
+  background: rgba(255, 255, 255, 0.08); padding: 0.15em 0.35em;
+  border-radius: 4px; font-size: 0.88em; font-family: "SF Mono", Menlo, monospace;
+}
+.chat-msg.markdown-body pre {
+  background: rgba(0, 0, 0, 0.25); padding: 0.75em; border-radius: 6px;
+  overflow-x: auto; margin: 0.5em 0;
+}
+.chat-msg.markdown-body pre code {
+  background: none; padding: 0; font-size: 0.85em;
+}
+.chat-msg.markdown-body h1,
+.chat-msg.markdown-body h2,
+.chat-msg.markdown-body h3 {
+  font-size: 1em; font-weight: 600; margin: 0.75em 0 0.25em;
+}
+.chat-msg.markdown-body blockquote {
+  border-left: 3px solid var(--border); padding-left: 0.75em;
+  color: var(--text-muted); margin: 0.5em 0;
+}
+.chat-msg.markdown-body a { color: var(--primary); text-decoration: underline; }
+
+/* ── Typing indicator (triple dot) ── */
+.typing-indicator {
+  display: inline-flex; gap: 4px; align-items: center; height: 1.5em;
+}
+.typing-indicator span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-muted);
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typing-bounce {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-4px); }
+}
+
+/* ── Card loading indicator (shown while card JSON is buffering) ── */
+.card-loading-indicator {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text-muted); font-size: 0.85rem;
+  padding: 0.5rem 0; margin-left: 0.25rem;
+}
+
+/* ── Tool activity indicator (shown during tool calls) ── */
+.tool-activity-indicator {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text-muted); font-size: 0.85rem;
+}
+.card-loading-dots {
+  display: inline-flex; gap: 3px; align-items: center;
+}
+.card-loading-dots span {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--text-muted);
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.card-loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.card-loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+/* Card group wrapper for multi-card messages */
+.card-group { display: flex; flex-direction: column; }
+
+/* Confirmed button state — green, non-interactive */
+.btn.btn-confirmed {
+  background: var(--success); color: #fff;
+  pointer-events: none; cursor: default; opacity: 0.9;
+  border-color: var(--success);
+}
+
+/* ── Document highlights ── */
+.doc-highlight {
+  background: rgba(124, 111, 247, 0.2); border-left: 3px solid var(--primary);
+  padding: 0.1rem 0.4rem; cursor: pointer; border-radius: 2px;
+}
+.doc-highlight.active { background: rgba(124, 111, 247, 0.4); }
+
+/* ── Floating "Generate Test" selection button ── */
+.doc-selection-test-btn {
+  position: absolute;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-family: var(--font);
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transform: translateX(-50%);
+  animation: doc-sel-btn-in 0.12s ease-out;
+  transition: background 0.15s;
+}
+.doc-selection-test-btn:hover { background: var(--primary-hover); }
+.doc-selection-test-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.doc-selection-test-icon { font-size: 0.9rem; }
+@keyframes doc-sel-btn-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Grounding highlights (fidelity report) ── */
+.doc-grounding-highlight {
+  background: rgba(46, 204, 113, 0.15);
+  border-left: 3px solid #2ecc71;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+.doc-grounding-highlight:hover {
+  background: rgba(46, 204, 113, 0.3);
+}
+.doc-grounding-highlight.active {
+  background: rgba(46, 204, 113, 0.45);
+  box-shadow: 0 0 0 1px #2ecc71;
+}
+.doc-grounding-highlight[data-variable-name] {
+  background: rgba(52, 152, 219, 0.15);
+  border-left-color: #3498db;
+}
+.doc-grounding-highlight[data-variable-name]:hover {
+  background: rgba(52, 152, 219, 0.3);
+}
+.doc-grounding-highlight[data-variable-name].active {
+  background: rgba(52, 152, 219, 0.45);
+  box-shadow: 0 0 0 1px #3498db;
+}
+
+/* ── Weak (inferred) grounding highlights — variable-associated rules ── */
+.doc-grounding-highlight.doc-grounding-weak {
+  background: rgba(149, 165, 166, 0.15);
+  border-left-color: #95a5a6;
+  opacity: 0.75;
+}
+.doc-grounding-highlight.doc-grounding-weak:hover {
+  background: rgba(149, 165, 166, 0.3);
+  opacity: 1;
+}
+.doc-grounding-highlight.doc-grounding-weak.active {
+  background: rgba(149, 165, 166, 0.4);
+  box-shadow: 0 0 0 1px #95a5a6;
+  opacity: 1;
+}
+
+/* ── Fuzzy (LCS-matched) grounding highlights ── */
+.doc-grounding-highlight.doc-grounding-fuzzy {
+  background: rgba(46, 204, 113, 0.08);
+  border-left: 3px dashed #2ecc71;
+}
+.doc-grounding-highlight.doc-grounding-fuzzy:hover {
+  background: rgba(46, 204, 113, 0.2);
+}
+.doc-grounding-highlight.doc-grounding-fuzzy.active {
+  background: rgba(46, 204, 113, 0.3);
+  box-shadow: 0 0 0 1px #2ecc71;
+}
+.doc-grounding-highlight.doc-grounding-fuzzy[data-variable-name] {
+  background: rgba(52, 152, 219, 0.08);
+  border-left-color: #3498db;
+}
+.doc-grounding-highlight.doc-grounding-fuzzy[data-variable-name]:hover {
+  background: rgba(52, 152, 219, 0.2);
+}
+
+/* ── Sub-entity highlights (individual items from enumeration statements) ── */
+.doc-grounding-highlight.doc-grounding-sub-entity {
+  border-left-style: dotted;
+}
+
+/* ── Focused view: dimmed blocks ── */
+.doc-dimmed {
+  opacity: 0.3;
+  transition: opacity 0.2s ease;
+}
+.doc-dimmed:hover {
+  opacity: 0.8;
+}
+
+/* ── Focused view: highlight pulse animation ── */
+@keyframes highlight-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(46, 204, 113, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+}
+.doc-highlight-pulse {
+  animation: highlight-pulse 0.8s ease-out;
+}
+
+/* ── Rendered markdown preview ── */
+.doc-preview-content {
+  padding: 1rem 1.5rem; font-size: 0.9rem; line-height: 1.7;
+  overflow-wrap: break-word;
+}
+.doc-preview-content h1,
+.doc-preview-content h2,
+.doc-preview-content h3,
+.doc-preview-content h4 { margin: 1.2em 0 0.4em; }
+.doc-preview-content h1 { font-size: 1.4rem; }
+.doc-preview-content h2 { font-size: 1.2rem; }
+.doc-preview-content h3 { font-size: 1.05rem; }
+.doc-preview-content p { margin: 0.5em 0; }
+.doc-preview-content ul,
+.doc-preview-content ol { padding-left: 1.5em; margin: 0.5em 0; }
+.doc-preview-content code {
+  background: rgba(255,255,255,0.06); padding: 0.15em 0.35em;
+  border-radius: 3px; font-size: 0.85em;
+}
+.doc-preview-content pre {
+  background: rgba(255,255,255,0.04); padding: 0.8rem 1rem;
+  border-radius: 4px; overflow-x: auto;
+}
+.doc-preview-content pre code { background: none; padding: 0; }
+.doc-preview-content table {
+  border-collapse: collapse; width: 100%; margin: 0.5em 0;
+}
+.doc-preview-content th,
+.doc-preview-content td {
+  border: 1px solid rgba(255,255,255,0.1); padding: 0.4em 0.6em;
+  text-align: left;
+}
+.doc-preview-content th { background: rgba(255,255,255,0.04); }
+.doc-preview-content blockquote {
+  border-left: 3px solid var(--primary, #7c6ff7); margin: 0.5em 0;
+  padding: 0.3em 1em; opacity: 0.85;
+}
+
+/* ── Chat input ── */
+.chat-input-area {
+  display: flex; gap: 0.5rem; padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.chat-input-area textarea {
+  flex: 1; resize: none; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 0.6rem; font-family: var(--font); font-size: 0.95rem;
+}
+.chat-input-area textarea:focus { outline: none; border-color: var(--primary); }
+
+/* ── Test panel ── */
+
+.test-list {
+  list-style: none; padding: 0; margin: 0;
+}
+
+.test-item {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  padding: 0.6rem 1rem; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+.test-item:hover { background: var(--surface-hover); }
+.test-item.selected { background: rgba(124, 111, 247, 0.15); border-left: 3px solid var(--primary); padding-left: calc(1rem - 3px); }
+.test-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.test-status-icon {
+  flex-shrink: 0; font-size: 1rem; line-height: 1.4;
+  width: 1.2rem; text-align: center;
+}
+
+.test-item-content {
+  display: flex; flex-direction: column; gap: 0.2rem;
+  min-width: 0;
+}
+
+.test-item-label {
+  font-size: 0.85rem; line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+}
+
+.test-item-query {
+  font-weight: 500;
+}
+
+.test-item-guard {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.test-result-badge {
+  font-size: 0.75rem; color: var(--error);
+  background: rgba(239, 83, 80, 0.1);
+  padding: 0.1rem 0.4rem; border-radius: 3px;
+  align-self: flex-start;
+}
+
+/* ── Test create form ── */
+.test-toolbar {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Spinner animation (shared by test-spinner, status-working, etc.) ── */
+@keyframes picker-spin { to { transform: rotate(360deg); } }
+
+/* ── Agent working status ── */
+.status-bubble {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  display: flex; flex-direction: column; gap: 0.25rem;
+  padding: 0.75rem 1rem;
+}
+.status-working .status-current-step {
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.status-working .status-current-step::after {
+  content: "";
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: picker-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.status-log-entry {
+  font-size: 0.82rem;
+  color: var(--success);
+  padding-left: 0.1rem;
+  line-height: 1.4;
+}
+.status-step-error {
+  color: #e06c75;
+}
+
+/* ── Entity links in chat (rule IDs / variable names) ── */
+.entity-link {
+  color: var(--primary);
+  text-decoration: none;
+  background: rgba(124, 111, 247, 0.1);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.88em;
+  font-family: "SF Mono", Menlo, monospace;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.entity-link:hover {
+  background: rgba(124, 111, 247, 0.25);
+  text-decoration: underline;
+}
+.entity-link[data-entity-type="variable"] {
+  color: #3498db;
+  background: rgba(52, 152, 219, 0.1);
+}
+.entity-link[data-entity-type="variable"]:hover {
+  background: rgba(52, 152, 219, 0.25);
+}
+
+/* ── Document regenerate bar ── */
+.doc-regenerate-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.35rem 0.75rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Document section accordion ── */
+
+/* ── Section checkbox (multi-select mode) ── */
+.doc-section-checkbox {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.doc-section-checkbox:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.doc-section-item {
+  border-bottom: 1px solid var(--border);
+}
+
+.doc-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  transition: background 0.12s;
+  user-select: none;
+}
+.doc-section-header:hover {
+  background: var(--surface-hover);
+}
+
+.doc-section-toggle {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  width: 1rem;
+  text-align: center;
+}
+
+.doc-section-title {
+  flex: 1;
+  font-size: 0.88rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.doc-section-body {
+  padding: 0.5rem 1rem 1rem 2rem;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+.doc-section-body.collapsed {
+  display: none;
+}
+.doc-section-body h1,
+.doc-section-body h2,
+.doc-section-body h3,
+.doc-section-body h4 { margin: 0.8em 0 0.3em; }
+.doc-section-body h1 { font-size: 1.2rem; }
+.doc-section-body h2 { font-size: 1.05rem; }
+.doc-section-body h3 { font-size: 0.95rem; }
+.doc-section-body p { margin: 0.4em 0; }
+.doc-section-body ul,
+.doc-section-body ol { padding-left: 1.5em; margin: 0.4em 0; }
+.doc-section-body code {
+  background: rgba(255,255,255,0.06); padding: 0.15em 0.35em;
+  border-radius: 3px; font-size: 0.85em;
+}
+.doc-section-body pre {
+  background: rgba(255,255,255,0.04); padding: 0.6rem 0.8rem;
+  border-radius: 4px; overflow-x: auto;
+}
+.doc-section-body pre code { background: none; padding: 0; }
+.doc-section-body table { border-collapse: collapse; width: 100%; margin: 0.4em 0; }
+.doc-section-body th,
+.doc-section-body td {
+  border: 1px solid rgba(255,255,255,0.1); padding: 0.35em 0.5em; text-align: left;
+}
+.doc-section-body th { background: rgba(255,255,255,0.04); }
+.doc-section-body blockquote {
+  border-left: 3px solid var(--primary); margin: 0.4em 0;
+  padding: 0.2em 0.8em; opacity: 0.85;
+}
+
+.doc-section-fidelity-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Document tree toolbar ── */
+.doc-tree-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.doc-tree-container {
+  padding: 0.25rem 0;
+}
+
+/* ── Tree node inline action icons ── */
+.doc-tree-node-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.doc-tree-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: filter 0.15s;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+.doc-tree-action-icon:hover:not(:disabled) {
+  filter: brightness(1.3);
+}
+.doc-tree-action-icon:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* HACK: Cloudscape TreeView internal class — revisit on upgrade.
+   Forces vertical centering of action icons with node content. */
+.doc-tree-container [class*="content-wrap"] {
+  align-items: center !important;
+}
+
+/* ── End of styles ── */

@@ -1,0 +1,129 @@
+{
+  "_meta": {
+    "description": "Benchmark policy definition for the Acme Corp expense approval policy. Contains 4 intentional deficiencies that should cause specific test failures.",
+    "deficiencies": {
+      "D1_wrong_implication": "Rule R1AUTOAPROVE has reversed implication: says 'if auto-approved then amount <= 100' instead of 'if amount <= 100 then auto-approved'. Tests expecting auto-approval for small expenses will fail.",
+      "D2_wrong_threshold": "Rule R3FINAPPROVE uses 1000 instead of 5000 as the finance approval threshold. Tests expecting no finance approval for $3,000 expenses will fail.",
+      "D3_missing_variable": "Variable 'isInternational' is omitted from the definition. Tests about international travel reimbursement will get NO_TRANSLATIONS.",
+      "D4_ambiguous_description": "Variable 'reimbursementDays' has a vague description ('days for reimbursement') instead of specifying the two tiers (5 days under $1000, 15 days for $1000+). Tests about reimbursement timing will get TRANSLATION_AMBIGUOUS."
+    },
+    "ruleIdMap": {
+      "R1AUTOAPROVE": "Auto-approve rule (D1: wrong implication direction)",
+      "R2MGRAPPROVE": "Manager approval rule",
+      "R3FINAPPROVE": "Finance approval rule (D2: wrong threshold 1000 instead of 5000)",
+      "R4FTCANSUBMT": "Full-time employee can submit",
+      "R5CTRNOSUBMT": "Contractor cannot submit",
+      "R6RECEIPTRQD": "Receipt required over $25",
+      "R7NORECPTSML": "No receipt for small expenses",
+      "R8DOMMEALALW": "Domestic meal allowance",
+      "R9AMTPOSITIV": "Expense amount non-negative"
+    }
+  },
+  "policyDefinition": {
+    "rules": [
+      {
+        "id": "R1AUTOAPROVE",
+        "expression": "(=> autoApproved (<= expenseAmount 100))",
+        "alternateExpression": "if the expense is auto-approved, then the amount is $100 or less"
+      },
+      {
+        "id": "R2MGRAPPROVE",
+        "expression": "(=> (and (> expenseAmount 100) (<= expenseAmount 5000)) requiresManagerApproval)",
+        "alternateExpression": "if the expense amount is over $100 and up to $5,000, then manager approval is required"
+      },
+      {
+        "id": "R3FINAPPROVE",
+        "expression": "(=> (> expenseAmount 1000) requiresFinanceApproval)",
+        "alternateExpression": "if the expense amount is over $1,000, then finance department approval is required"
+      },
+      {
+        "id": "R4FTCANSUBMT",
+        "expression": "(=> isFullTimeEmployee canSubmitExpense)",
+        "alternateExpression": "if the person is a full-time employee, then they can submit an expense report"
+      },
+      {
+        "id": "R5CTRNOSUBMT",
+        "expression": "(=> isContractor (not canSubmitExpense))",
+        "alternateExpression": "if the person is a contractor, then they cannot submit an expense report"
+      },
+      {
+        "id": "R6RECEIPTRQD",
+        "expression": "(=> (> expenseAmount 25) receiptRequired)",
+        "alternateExpression": "if the expense amount is over $25, then an itemized receipt is required"
+      },
+      {
+        "id": "R7NORECPTSML",
+        "expression": "(=> (<= expenseAmount 25) (not receiptRequired))",
+        "alternateExpression": "if the expense amount is $25 or less, then a receipt is not required"
+      },
+      {
+        "id": "R8DOMMEALALW",
+        "expression": "(=> isDomesticTravel (= dailyMealAllowance 75))",
+        "alternateExpression": "if the travel is domestic, then the daily meal allowance is $75"
+      },
+      {
+        "id": "R9AMTPOSITIV",
+        "expression": "(>= expenseAmount 0)",
+        "alternateExpression": "the expense amount is at least 0"
+      }
+    ],
+    "variables": [
+      {
+        "name": "expenseAmount",
+        "type": "INT",
+        "description": "The dollar amount of the expense being submitted for reimbursement. Must be a non-negative whole number."
+      },
+      {
+        "name": "isFullTimeEmployee",
+        "type": "BOOL",
+        "description": "Whether the person submitting the expense is a full-time employee of Acme Corp. Full-time employees are eligible to submit expense reports."
+      },
+      {
+        "name": "isContractor",
+        "type": "BOOL",
+        "description": "Whether the person submitting the expense is a contractor. Contractors are not eligible to submit expense reports."
+      },
+      {
+        "name": "canSubmitExpense",
+        "type": "BOOL",
+        "description": "Whether the person is allowed to submit an expense report."
+      },
+      {
+        "name": "autoApproved",
+        "type": "BOOL",
+        "description": "Whether the expense is automatically approved without requiring any manager or finance approval. Expenses of $100 or less are auto-approved."
+      },
+      {
+        "name": "requiresManagerApproval",
+        "type": "BOOL",
+        "description": "Whether the expense requires approval from the submitter's direct manager."
+      },
+      {
+        "name": "requiresFinanceApproval",
+        "type": "BOOL",
+        "description": "Whether the expense requires approval from the finance department."
+      },
+      {
+        "name": "receiptRequired",
+        "type": "BOOL",
+        "description": "Whether an itemized receipt must be attached to the expense report."
+      },
+      {
+        "name": "isDomesticTravel",
+        "type": "BOOL",
+        "description": "Whether the travel is domestic (within the same country)."
+      },
+      {
+        "name": "dailyMealAllowance",
+        "type": "INT",
+        "description": "The maximum dollar amount allowed per day for meal expenses during travel."
+      },
+      {
+        "name": "reimbursementDays",
+        "type": "INT",
+        "description": "Days for reimbursement."
+      }
+    ],
+    "types": []
+  }
+}

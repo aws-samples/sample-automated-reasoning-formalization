@@ -1,0 +1,4 @@
+# Ignore generated benchmark reports (keep the example)
+*
+!.gitignore
+!example-benchmark-report.html

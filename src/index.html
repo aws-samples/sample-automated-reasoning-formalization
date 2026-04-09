@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' https://*.amazonaws.com http://localhost:*;" />
+  <title>ARchitect</title>
+</head>
+<body>
+  <!-- Legacy app container — hidden at startup, kept for backward compat -->
+  <div id="app" style="display: none;">
+    <div class="titlebar" id="titlebar"></div>
+  </div>
+
+  <!-- React root: all screens render here -->
+  <div id="react-root" style="height: 100%;"></div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "../dist/benchmarks",
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../src/services/**/*.ts",
+    "../src/types/**/*.ts",
+    "../src/utils/**/*.ts",
+    "../src/prompts/**/*.ts"
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "_meta": {
+    "description": "Benchmark test cases for the expense approval policy. Each test targets a specific deficiency in the policy definition. The 'targetDeficiency' and 'notes' fields are metadata for the benchmark — only guardContent, queryContent, and expectedResult are sent to the API."
+  },
+  "tests": [
+    {
+      "id": "test-auto-approve-small",
+      "guardContent": "An employee submits a $50 expense report. The expense is automatically approved without any manager review.",
+      "queryContent": "Is a $50 expense automatically approved?",
+      "expectedResult": "VALID",
+      "targetDeficiency": "D1_wrong_implication",
+      "notes": "With the reversed implication (=> autoApproved (<= amount 100)), the reasoner cannot conclude autoApproved from amount=50. Should fail until the agent reverses the implication to (=> (<= amount 100) autoApproved)."
+    },
+    {
+      "id": "test-auto-approve-boundary",
+      "guardContent": "An employee submits a $100 expense. It does not require manager approval and is automatically reimbursed.",
+      "queryContent": "Is a $100 expense auto-approved?",
+      "expectedResult": "VALID",
+      "targetDeficiency": "D1_wrong_implication",
+      "notes": "Second test for same deficiency — validates the fix generalizes to boundary values."
+    },
+    {
+      "id": "test-finance-threshold",
+      "guardContent": "An employee submits a $3,000 expense. It requires manager approval but does not require finance department approval.",
+      "queryContent": "Does a $3,000 expense need finance approval?",
+      "expectedResult": "INVALID",
+      "targetDeficiency": "D2_wrong_threshold",
+      "notes": "The rule uses 1000 threshold instead of 5000. With (=> (> amount 1000) requiresFinanceApproval), a $3000 expense triggers finance approval. The test expects INVALID (no finance approval needed), so it should fail until the agent fixes the threshold to 5000."
+    },
+    {
+      "id": "test-finance-above-5000",
+      "guardContent": "An employee submits a $7,500 expense for a conference. It requires both manager approval and finance department approval.",
+      "queryContent": "Does a $7,500 expense require finance approval?",
+      "expectedResult": "VALID",
+      "targetDeficiency": "D2_wrong_threshold",
+      "notes": "This test should pass even with the wrong threshold (1000 < 7500), serving as a control. If the agent over-corrects and removes the finance rule entirely, this test will catch it."
+    },
+    {
+      "id": "test-international-travel",
+      "guardContent": "An employee books an international flight for $800. International travel expenses require finance department approval regardless of the amount.",
+      "queryContent": "Does an $800 international travel expense require finance approval?",
+      "expectedResult": "VALID",
+      "targetDeficiency": "D3_missing_variable",
+      "notes": "The variable 'isInternational' is missing from the policy. The reasoner cannot translate 'international' into any policy variable, causing NO_TRANSLATIONS. The agent needs to add the variable and a rule linking it to finance approval."
+    },
+    {
+      "id": "test-reimbursement-timing-small",
+      "guardContent": "An approved expense of $500 is reimbursed within 5 business days.",
+      "queryContent": "How quickly is a $500 approved expense reimbursed?",
+      "expectedResult": "VALID",
+      "targetDeficiency": "D4_ambiguous_description",
+      "notes": "The variable 'reimbursementDays' has a vague description ('Days for reimbursement') that doesn't specify the two tiers. The reasoner can't reliably translate '5 business days' to the variable, causing TRANSLATION_AMBIGUOUS. The agent needs to enrich the description."
+    }
+  ]
+}

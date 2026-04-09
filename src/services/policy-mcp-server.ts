@@ -1,0 +1,947 @@
+/**
+ * Policy workflow tool definitions and dispatch.
+ *
+ * Defines the tools the agent can call and dispatches them to
+ * PolicyWorkflowService. These tools are registered with the ACP
+ * session and executed in-process — no separate MCP server subprocess.
+ *
+ * The AcpClient intercepts tool call requests from the Kiro CLI and
+ * routes them here via dispatchToolCall().
+ */
+import type {
+  PolicyWorkflowService,
+  AddRuleInput,
+  AddVariableInput,
+  UpdateVariableInput,
+  UpdateTestInput,
+} from './policy-workflow-service';
+import { BuildFailedError } from './policy-workflow-service';
+import { consumeApprovalCode } from './approval-code-store';
+import { withRetry } from '../utils/retry';
+import type { BuildLogEntry } from '../types';
+import { extractBuildErrors } from '../utils/build-log';
+import type { ContextIndex } from './context-index';
+import {
+  searchDocument,
+  searchRules,
+  searchVariables,
+  getSectionRules,
+  getRuleDetails,
+  getVariableDetails,
+  findRelatedContent,
+} from './context-index';
+
+/**
+ * Format build log entries into a concise summary string for the agent.
+ * Shows each annotation's status and any messages from its build steps.
+ */
+function formatBuildLogSummary(entries: BuildLogEntry[]): string {
+  return entries.map((entry) => {
+    const annotation = Object.keys(entry.annotation)[0] ?? 'unknown';
+    const messages = (entry.buildSteps ?? [])
+      .flatMap((step) => step.messages ?? [])
+      .map((m) => `  ${m.messageType}: ${m.message}`);
+    const detail = messages.length > 0 ? '\n' + messages.join('\n') : '';
+    return `${annotation}: ${entry.status}${detail}`;
+  }).join('\n');
+}
+
+// ── Approval code validation ──
+
+const APPROVAL_REJECTION_MESSAGE =
+  'APPROVAL REQUIRED: You cannot call this tool without a valid approval code. ' +
+  'You must: (1) emit a proposal card, (2) wait for the user to click Approve, ' +
+  "(3) extract the EXACT code from the [APPROVAL_CODE: ...] tag in the user's approval message, " +
+  'and (4) pass that code as the approvalCode parameter. ' +
+  "Do NOT fabricate a code — it must come from the user's approval message. " +
+  "The code is a random string like 'xK8mPq2n-aB4c-dE7f-gH1j-kL3mNpQrStUv', not a descriptive name.";
+
+/** Tools that require an approval code before execution. */
+const TOOLS_REQUIRING_APPROVAL = new Set([
+  'add_rules', 'add_variables', 'update_variables', 'delete_rules', 'delete_variables',
+  'update_tests', 'delete_tests',
+]);
+
+/**
+ * Validate the approval code for a mutating tool call.
+ * Returns an error result if invalid, or null if the code is valid.
+ */
+function validateApprovalCode(
+  toolName: string,
+  args: Record<string, unknown>,
+  logger?: (tag: string, ...args: unknown[]) => void,
+): ToolCallResult | null {
+  if (!TOOLS_REQUIRING_APPROVAL.has(toolName)) return null;
+
+  const code = args.approvalCode as string | undefined;
+  if (!code) {
+    logger?.('approval', `${toolName} rejected — no approval code provided`);
+    return {
+      content: [{ type: 'text', text: APPROVAL_REJECTION_MESSAGE }],
+      isError: true,
+    };
+  }
+
+  const filePath = process.env.APPROVAL_CODE_FILE;
+  if (!filePath) {
+    logger?.('approval', `${toolName} rejected — no APPROVAL_CODE_FILE env var, cannot validate`);
+    return {
+      content: [{
+        type: 'text',
+        text: 'APPROVAL SYSTEM ERROR: The approval code validation system is not configured. ' +
+          'This tool call cannot proceed without approval validation. ' +
+          'Please restart the application and try again.',
+      }],
+      isError: true,
+    };
+  }
+
+  const valid = consumeApprovalCode(filePath, code);
+  if (!valid) {
+    logger?.('approval', `${toolName} rejected — invalid or already-used approval code: ${code}`);
+    return {
+      content: [{
+        type: 'text',
+        text: 'INVALID APPROVAL CODE: The code you provided is not valid or has already been used. ' +
+          'Each approval code is SINGLE-USE — once consumed by a tool call, it cannot be reused. ' +
+          'You must emit a NEW proposal card and wait for the user to click Approve to get a fresh code. ' +
+          "Look for the [APPROVAL_CODE: ...] tag in the user's most recent message — " +
+          "the code is a random string like 'xK8mPq2n-aB4c-dE7f-gH1j-kL3mNpQrStUv'. " +
+          'If there is no such tag, you must emit a NEW proposal card and wait for the user to click Approve.',
+      }],
+      isError: true,
+    };
+  }
+
+  logger?.('approval', `${toolName} — approval code validated and consumed: ${code}`);
+  return null;
+}
+
+const approvalCodeProperty = {
+  type: 'string',
+  description:
+    "REQUIRED — The exact approval code from the user's approval message. " +
+    'When the user clicks Approve on a proposal card, their message contains ' +
+    'an [APPROVAL_CODE: <code>] tag. Extract the code string from that tag ' +
+    'and pass it here. Do NOT invent your own code — it is a random string ' +
+    'generated by the UI and validated server-side.',
+};
+
+// ── Tool Definitions ──
+
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required: string[];
+  };
+}
+
+/**
+ * Tool definitions for the policy workflow tools.
+ * Passed to the ACP session so the agent knows what tools are available.
+ */
+export const POLICY_TOOLS: ToolDefinition[] = [
+  {
+    name: 'generate_fidelity_report',
+    description:
+      'Analyze how well the policy covers the rules described in source documents. ' +
+      'Returns coverage and accuracy scores with per-rule and per-variable grounding details.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy to analyze' },
+      },
+      required: ['policyArn'],
+    },
+  },
+  {
+    name: 'add_rules',
+    description:
+      'Add one or more rules to the policy using SMT-LIB expressions. ' +
+      'Rules MUST be written as SMT-LIB implications (=>) in if/then format. ' +
+      'All variables referenced in the expression must already exist in the policy. ' +
+      'Maximum 10 rules per call. ' +
+      'Handles the full REFINE_POLICY build workflow automatically.\n\n' +
+      'SMT-LIB expression format:\n' +
+      '- Implication: (=> condition conclusion)\n' +
+      '- And: (and expr1 expr2 ...)\n' +
+      '- Or: (or expr1 expr2 ...)\n' +
+      '- Not: (not expr)\n' +
+      '- Equality: (= var value)\n' +
+      '- Comparison: (< var value), (> var value), (<= var value), (>= var value)\n' +
+      '- Bool variables: use the variable name directly for true, (not varName) for false\n' +
+      '- Enum variables: (= varName ENUM_VALUE)\n' +
+      '- Int/Real variables: use arithmetic comparisons\n\n' +
+      'Example: (=> (and (= userRole MANAGER) (< requestAmount 5000)) (not approvalRequired))',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy to modify' },
+        approvalCode: approvalCodeProperty,
+        rules: {
+          type: 'array',
+          description: 'Rules to add as SMT-LIB expressions',
+          items: {
+            type: 'object',
+            properties: {
+              expression: {
+                type: 'string',
+                description:
+                  'SMT-LIB expression for the rule. Must be an implication (=>) in if/then format. ' +
+                  'Example: (=> (and (= userRole MANAGER) (< requestAmount 5000)) (not approvalRequired))',
+              },
+            },
+            required: ['expression'],
+          },
+          minItems: 1,
+          maxItems: 10,
+        },
+      },
+      required: ['policyArn', 'approvalCode', 'rules'],
+    },
+  },
+  {
+    name: 'add_variables',
+    description:
+      'Add one or more variables to the policy. Variables represent dynamic values ' +
+      'used in rule expressions. Maximum 10 variables per call. ' +
+      'Handles the full REFINE_POLICY build workflow automatically.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy to modify' },
+        approvalCode: approvalCodeProperty,
+        variables: {
+          type: 'array',
+          description: 'Variables to add',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Variable name in camelCase' },
+              type: {
+                type: 'string',
+                description:
+                  "Variable data type. ONLY these built-in types are valid: 'BOOL' (true/false), 'INT' (whole numbers), " +
+                  "'REAL' (decimal numbers). NEVER use 'boolean', 'integer', 'string', 'number', or 'enum' — " +
+                  "these will cause 'Enum type X was not found' errors and the call will fail. " +
+                  'For categorical/string values, define a custom type using addType first, then pass that custom type name here.',
+              },
+              description: {
+                type: 'string',
+                description:
+                  'Rich description including: what it represents, units/format, ' +
+                  'common synonyms, and boundary conditions',
+              },
+            },
+            required: ['name', 'type', 'description'],
+          },
+          minItems: 1,
+          maxItems: 10,
+        },
+      },
+      required: ['policyArn', 'approvalCode', 'variables'],
+    },
+  },
+  {
+    name: 'update_variables',
+    description:
+      'Update descriptions (and optionally names) of existing policy variables. ' +
+      'This is the primary fix for TRANSLATION_AMBIGUOUS test failures — ' +
+      'enriching variable descriptions with synonyms, domain terms, and contextual clues. ' +
+      'Maximum 10 variables per call. Handles the full REFINE_POLICY build workflow automatically.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy to modify' },
+        approvalCode: approvalCodeProperty,
+        variables: {
+          type: 'array',
+          description: 'Variables to update',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Current variable name' },
+              newName: { type: 'string', description: 'New variable name (optional rename)' },
+              description: {
+                type: 'string',
+                description:
+                  'Updated description with synonyms, domain terms, units, ' +
+                  'and boundary conditions for better translation accuracy',
+              },
+            },
+            required: ['name', 'description'],
+          },
+          minItems: 1,
+          maxItems: 10,
+        },
+      },
+      required: ['policyArn', 'approvalCode', 'variables'],
+    },
+  },
+  {
+    name: 'delete_rules',
+    description:
+      'Delete one or more rules from the policy by their rule IDs. ' +
+      'Maximum 10 rules per call. ' +
+      'Handles the full REFINE_POLICY build workflow automatically.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy to modify' },
+        approvalCode: approvalCodeProperty,
+        ruleIds: {
+          type: 'array',
+          description: 'IDs of the rules to delete',
+          items: { type: 'string' },
+          minItems: 1,
+          maxItems: 10,
+        },
+      },
+      required: ['policyArn', 'approvalCode', 'ruleIds'],
+    },
+  },
+  {
+    name: 'delete_variables',
+    description:
+      'Delete one or more variables from the policy by name. ' +
+      'Ensure no rules reference the variable before deleting. ' +
+      'Maximum 10 variables per call. ' +
+      'Handles the full REFINE_POLICY build workflow automatically.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy to modify' },
+        approvalCode: approvalCodeProperty,
+        variableNames: {
+          type: 'array',
+          description: 'Names of the variables to delete',
+          items: { type: 'string' },
+          minItems: 1,
+          maxItems: 10,
+        },
+      },
+      required: ['policyArn', 'approvalCode', 'variableNames'],
+    },
+  },
+  {
+    name: 'execute_tests',
+    description:
+      'Run one or more existing test cases against the latest completed policy build in a single call. ' +
+      'Accepts a list of test case IDs so you can batch-run multiple tests at once instead of calling this tool repeatedly. ' +
+      'Automatically finds the most recent build — no build ID needed. ' +
+      'Returns results with pass/fail status and detailed findings for each test.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy to test' },
+        testCaseIds: {
+          type: 'array',
+          description: 'IDs of existing test cases to run. Pass multiple IDs to batch-run tests in a single call.',
+          items: { type: 'string' },
+          minItems: 1,
+        },
+      },
+      required: ['policyArn', 'testCaseIds'],
+    },
+  },
+  {
+    name: 'update_tests',
+    description:
+      'Update existing test cases. Use this to change the guard content (answer/context), ' +
+      'query content (question), or expected result of previously created tests. ' +
+      'Each update requires the testCaseId. Only the fields you provide will be changed; ' +
+      'omitted fields keep their current values.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy containing the tests' },
+        approvalCode: approvalCodeProperty,
+        updates: {
+          type: 'array',
+          description: 'Test case updates to apply',
+          items: {
+            type: 'object',
+            properties: {
+              testCaseId: {
+                type: 'string',
+                description: 'ID of the test case to update',
+              },
+              guardContent: {
+                type: 'string',
+                description: 'Updated answer/context — facts and conditions for the test scenario',
+              },
+              queryContent: {
+                type: 'string',
+                description: 'Updated question — what to validate against the policy',
+              },
+              expectedResult: {
+                type: 'string',
+                enum: ['VALID', 'SATISFIABLE', 'INVALID', 'IMPOSSIBLE'],
+                description: 'Updated expected test outcome',
+              },
+            },
+            required: ['testCaseId'],
+          },
+          minItems: 1,
+        },
+      },
+      required: ['policyArn', 'approvalCode', 'updates'],
+    },
+  },
+  {
+    name: 'delete_tests',
+    description:
+      'Delete one or more existing test cases by their IDs. ' +
+      'This is permanent and cannot be undone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy containing the tests' },
+        approvalCode: approvalCodeProperty,
+        testCaseIds: {
+          type: 'array',
+          description: 'IDs of the test cases to delete',
+          items: { type: 'string' },
+          minItems: 1,
+        },
+      },
+      required: ['policyArn', 'approvalCode', 'testCaseIds'],
+    },
+  },
+];
+
+// ── Search Tool Definitions (read-only, no approval required) ──
+
+export const SEARCH_TOOLS: ToolDefinition[] = [
+  {
+    name: 'search_document',
+    description:
+      'Search the source document for passages matching a query. ' +
+      'Returns matching lines with surrounding context and section information. ' +
+      'Use this to find what the source document says about a specific topic.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy' },
+        query: { type: 'string', description: 'Search terms to find in the document. Matches are case-insensitive.' },
+        maxResults: { type: 'number', description: 'Maximum number of matching passages to return. Default: 5.' },
+      },
+      required: ['policyArn', 'query'],
+    },
+  },
+  {
+    name: 'get_document_section',
+    description:
+      'Get the full text of a document section. Use the section IDs from the ' +
+      'document outline in the policy context, or from search_document results.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy' },
+        sectionId: { type: 'string', description: 'Section ID from the document outline.' },
+      },
+      required: ['policyArn', 'sectionId'],
+    },
+  },
+  {
+    name: 'search_rules',
+    description:
+      'Search policy rules by keyword. Matches against rule descriptions (natural language) ' +
+      'and SMT-LIB expressions. Use this to find rules related to a specific concept ' +
+      'when the policy has too many rules to list in context. ' +
+      'Returns rule IDs, descriptions, and accuracy scores.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy' },
+        query: { type: 'string', description: 'Search terms to match against rule descriptions and expressions. Case-insensitive.' },
+        maxResults: { type: 'number', description: 'Maximum number of rules to return. Default: 10.' },
+      },
+      required: ['policyArn', 'query'],
+    },
+  },
+  {
+    name: 'search_variables',
+    description:
+      'Search policy variables by keyword. Matches against variable names and descriptions. ' +
+      'Use this to find variables related to a specific concept. ' +
+      'Returns variable names, types, descriptions, and accuracy scores.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy' },
+        query: { type: 'string', description: 'Search terms to match against variable names and descriptions. Case-insensitive.' },
+        maxResults: { type: 'number', description: 'Maximum number of variables to return. Default: 10.' },
+      },
+      required: ['policyArn', 'query'],
+    },
+  },
+  {
+    name: 'get_section_rules',
+    description:
+      'Get all rules and variables grounded in a specific document section. ' +
+      'Use the section IDs from the document outline. ' +
+      'Returns rules with their expressions and variables with their descriptions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy' },
+        sectionId: { type: 'string', description: 'Section ID from the document outline.' },
+      },
+      required: ['policyArn', 'sectionId'],
+    },
+  },
+  {
+    name: 'get_rule_details',
+    description:
+      'Get full details for specific rules including their SMT-LIB expressions, ' +
+      'fidelity grounding (which document statements they formalize), accuracy scores, ' +
+      'and which variables they reference. Use rule IDs from test findings, ' +
+      'search_rules results, or get_section_rules results.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy' },
+        ruleIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Rule IDs to look up. Maximum 20.',
+          maxItems: 20,
+        },
+      },
+      required: ['policyArn', 'ruleIds'],
+    },
+  },
+  {
+    name: 'get_variable_details',
+    description:
+      'Get full details for specific variables including their complete descriptions, ' +
+      'fidelity grounding, accuracy scores, and which rules reference them. ' +
+      'Use variable names from test findings, search_variables results, ' +
+      'or get_section_rules results.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy' },
+        variableNames: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Variable names to look up. Maximum 20.',
+          maxItems: 20,
+        },
+      },
+      required: ['policyArn', 'variableNames'],
+    },
+  },
+  {
+    name: 'find_related_content',
+    description:
+      'Given a rule ID or variable name, find all related content: ' +
+      'connected rules, variables, document sections, and fidelity assessments. ' +
+      'Use this to explore the policy graph when diagnosing a test failure ' +
+      'that involves interconnected rules and variables.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        policyArn: { type: 'string', description: 'ARN of the policy' },
+        ruleId: { type: 'string', description: 'A rule ID to start from (optional).' },
+        variableName: { type: 'string', description: 'A variable name to start from (optional).' },
+        depth: { type: 'number', description: 'How many hops to traverse. 1 = direct connections only. 2 = connections of connections. Default: 1. Maximum: 2.' },
+      },
+      required: ['policyArn'],
+    },
+  },
+];
+
+export interface ToolCallResult {
+  content: { type: 'text'; text: string }[];
+  isError?: boolean;
+}
+
+const NO_INDEX_MESSAGE =
+  'Context index not available. The search tools require the context index to be built. ' +
+  'This happens automatically when a policy is loaded. If you just opened the policy, ' +
+  'try again in a moment. If the issue persists, generate a fidelity report to populate the index.';
+
+function noIndexError(log: (tag: string, ...args: unknown[]) => void): ToolCallResult {
+  log('dispatch', 'Search tool called but no context index available');
+  return { content: [{ type: 'text', text: NO_INDEX_MESSAGE }], isError: true };
+}
+
+/** Whether compact mode is active — determined by the presence of a context index. */
+function isCompactMode(contextIndex: ContextIndex | null): boolean {
+  return contextIndex !== null;
+}
+
+interface ChangedItem {
+  type: 'rule' | 'variable';
+  id: string;
+  action: 'added' | 'updated' | 'deleted';
+}
+
+/**
+ * Format a mutating tool response. In compact mode, omits the full policyDefinition
+ * and returns only changed items + counts. In full mode, includes the full definition.
+ */
+function formatMutationResponse(
+  result: import('./policy-workflow-service').RefinePolicyResult,
+  changedItems: ChangedItem[],
+  contextIndex: ContextIndex | null,
+): ToolCallResult {
+  const base = {
+    buildWorkflowId: result.buildWorkflowId,
+    ruleCount: result.policyDefinition.rules.length,
+    variableCount: result.policyDefinition.variables.length,
+    ...(result.buildErrors.length > 0 ? { buildErrors: result.buildErrors } : {}),
+    ...(result.buildLog.length > 0 ? { buildLogSummary: formatBuildLogSummary(result.buildLog) } : {}),
+  };
+
+  if (isCompactMode(contextIndex)) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({ ...base, changedItems }),
+      }],
+    };
+  }
+
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({ ...base, changedItems, policyDefinition: result.policyDefinition }),
+    }],
+  };
+}
+
+/**
+ * Dispatch a tool call to the appropriate PolicyWorkflowService method.
+ * Called by the AcpClient when it intercepts a tool call server request
+ * for one of our registered tools.
+ *
+ * Returns a result in the format expected by the ACP tool call response.
+ */
+export async function dispatchToolCall(
+  workflowService: PolicyWorkflowService,
+  contextIndex: ContextIndex | null,
+  toolName: string,
+  args: Record<string, unknown>,
+  logger?: (tag: string, ...args: unknown[]) => void,
+): Promise<ToolCallResult> {
+  const log = logger ?? (() => {});
+
+  // Validate approval code for mutating tools (no retry needed for validation)
+  const approvalError = validateApprovalCode(toolName, args, log);
+  if (approvalError) return approvalError;
+
+  return withRetry<ToolCallResult>(async (): Promise<ToolCallResult> => {
+    try {
+      switch (toolName) {
+      case 'generate_fidelity_report': {
+        log('dispatch', `generate_fidelity_report for ${args.policyArn}`);
+        const result = await workflowService.generateFidelityReport(
+          args.policyArn as string,
+          (msg) => log('progress', msg),
+        );
+        log('dispatch', `generate_fidelity_report done — coverage: ${result.report.coverageScore}, accuracy: ${result.report.accuracyScore}`);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              buildWorkflowId: result.buildWorkflowId,
+              coverageScore: result.report.coverageScore,
+              accuracyScore: result.report.accuracyScore,
+              ruleReports: result.report.ruleReports,
+              variableReports: result.report.variableReports,
+              sourceDocumentText: result.sourceDocumentText,
+            }),
+          }],
+        };
+      }
+
+      case 'add_rules': {
+        const rules = args.rules as AddRuleInput[];
+        log('dispatch', `add_rules — ${rules.length} rule(s) for ${args.policyArn}`);
+        const result = await workflowService.addRules(
+          args.policyArn as string, rules,
+          (msg) => log('progress', msg),
+        );
+        log('dispatch', `add_rules done — rules: ${result.policyDefinition.rules.length}, vars: ${result.policyDefinition.variables.length}`);
+
+        // Recover real ruleIds from the result by matching on expression text.
+        // The backend appends new rules, so last-match-wins handles duplicates.
+        const exprToRuleId = new Map<string, string>();
+        for (const r of result.policyDefinition.rules) {
+          exprToRuleId.set(r.expression, r.ruleId);
+        }
+
+        return formatMutationResponse(result, rules.map((r) => ({
+          type: 'rule' as const,
+          id: exprToRuleId.get(r.expression) ?? r.expression.slice(0, 60),
+          action: 'added' as const,
+        })), contextIndex);
+      }
+
+      case 'add_variables': {
+        const variables = args.variables as AddVariableInput[];
+
+        // Validate variable types before sending to the API.
+        // Built-in types are 'BOOL', 'INT', 'REAL'. Custom type names (PascalCase) are also valid.
+        // Common mistakes: 'boolean', 'integer', 'string', 'enum', 'number', 'float', and lowercase variants.
+        const BUILTIN_TYPES = new Set(['BOOL', 'INT', 'REAL']);
+        const COMMON_WRONG_TYPES: Record<string, string> = {
+          bool: 'BOOL',
+          boolean: 'BOOL',
+          int: 'INT',
+          integer: 'INT',
+          number: 'INT',
+          real: 'REAL',
+          float: 'REAL',
+          decimal: 'REAL',
+          double: 'REAL',
+          string: 'create a custom type with addType first, then reference it by name',
+          enum: 'create a custom type with addType first, then reference it by name',
+        };
+        for (const v of variables) {
+          const t = v.type?.toLowerCase();
+          if (!BUILTIN_TYPES.has(v.type) && COMMON_WRONG_TYPES[t]) {
+            const suggestion = COMMON_WRONG_TYPES[t];
+            return {
+              content: [{
+                type: 'text',
+                text: `Error: Invalid variable type '${v.type}' for variable '${v.name}'. `
+                  + `The only valid built-in types are 'BOOL', 'INT', and 'REAL'. `
+                  + (suggestion.startsWith('create')
+                    ? `For categorical or string values, ${suggestion}.`
+                    : `Did you mean '${suggestion}'? Please retry with the correct type.`),
+              }],
+              isError: true,
+            };
+          }
+        }
+
+        log('dispatch', `add_variables — ${variables.length} variable(s) for ${args.policyArn}`);
+        const result = await workflowService.addVariables(
+          args.policyArn as string, variables,
+          (msg) => log('progress', msg),
+        );
+        log('dispatch', `add_variables done — rules: ${result.policyDefinition.rules.length}, vars: ${result.policyDefinition.variables.length}`);
+        return formatMutationResponse(result, variables.map((v) => ({
+          type: 'variable' as const, id: v.name, action: 'added' as const,
+        })), contextIndex);
+      }
+
+      case 'update_variables': {
+        const variables = args.variables as UpdateVariableInput[];
+        log('dispatch', `update_variables — ${variables.length} variable(s) for ${args.policyArn}`);
+        const result = await workflowService.updateVariables(
+          args.policyArn as string, variables,
+          (msg) => log('progress', msg),
+        );
+        log('dispatch', `update_variables done — rules: ${result.policyDefinition.rules.length}, vars: ${result.policyDefinition.variables.length}`);
+        return formatMutationResponse(result, variables.map((v) => ({
+          type: 'variable' as const, id: v.name, action: 'updated' as const,
+        })), contextIndex);
+      }
+
+      case 'delete_rules': {
+        const ruleIds = args.ruleIds as string[];
+        log('dispatch', `delete_rules — ${ruleIds.length} rule(s) for ${args.policyArn}`);
+        const result = await workflowService.deleteRules(
+          args.policyArn as string, ruleIds,
+          (msg) => log('progress', msg),
+        );
+        log('dispatch', `delete_rules done — rules: ${result.policyDefinition.rules.length}, vars: ${result.policyDefinition.variables.length}`);
+        return formatMutationResponse(result, ruleIds.map((id) => ({
+          type: 'rule' as const, id, action: 'deleted' as const,
+        })), contextIndex);
+      }
+
+      case 'delete_variables': {
+        const variableNames = args.variableNames as string[];
+        log('dispatch', `delete_variables — ${variableNames.length} variable(s) for ${args.policyArn}`);
+        const result = await workflowService.deleteVariables(
+          args.policyArn as string, variableNames,
+          (msg) => log('progress', msg),
+        );
+        log('dispatch', `delete_variables done — rules: ${result.policyDefinition.rules.length}, vars: ${result.policyDefinition.variables.length}`);
+        return formatMutationResponse(result, variableNames.map((name) => ({
+          type: 'variable' as const, id: name, action: 'deleted' as const,
+        })), contextIndex);
+      }
+
+      case 'execute_tests': {
+        const testCaseIds = args.testCaseIds as string[];
+        log('dispatch', `execute_tests — ${testCaseIds.length} test(s) for ${args.policyArn}`);
+        const results = await workflowService.executeTests(
+          args.policyArn as string,
+          testCaseIds,
+          (msg) => log('progress', msg),
+        );
+        const passed = results.filter((r) => r.passed).length;
+        log('dispatch', `execute_tests done — ${passed}/${results.length} passed`);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              totalTests: results.length,
+              passed,
+              failed: results.length - passed,
+              results,
+            }),
+          }],
+        };
+      }
+
+      case 'update_tests': {
+        const updates = args.updates as UpdateTestInput[];
+        log('dispatch', `update_tests — ${updates.length} test(s) for ${args.policyArn}`);
+        const results = await workflowService.updateTests(
+          args.policyArn as string,
+          updates,
+          (msg) => log('progress', msg),
+        );
+        log('dispatch', `update_tests done — ${results.length} test(s) updated`);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              totalUpdated: results.length,
+              updates: results,
+            }),
+          }],
+        };
+      }
+
+      case 'delete_tests': {
+        const testCaseIds = args.testCaseIds as string[];
+        log('dispatch', `delete_tests — ${testCaseIds.length} test(s) for ${args.policyArn}`);
+        const deleted = await workflowService.deleteTests(
+          args.policyArn as string,
+          testCaseIds,
+          (msg) => log('progress', msg),
+        );
+        log('dispatch', `delete_tests done — ${deleted.length} test(s) deleted`);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              totalDeleted: deleted.length,
+              deletedTestCaseIds: deleted,
+            }),
+          }],
+        };
+      }
+
+      // ── Search tools (read-only, no approval required) ──
+
+      case 'search_document': {
+        if (!contextIndex) return noIndexError(log);
+        log('dispatch', `search_document for "${args.query}"`);
+        const results = searchDocument(contextIndex, args.query as string, args.maxResults as number | undefined);
+        return { content: [{ type: 'text', text: JSON.stringify({ results, fidelityAvailable: contextIndex.hasFidelityEdges, fidelityStale: contextIndex.fidelityStale }) }] };
+      }
+
+      case 'get_document_section': {
+        if (!contextIndex) return noIndexError(log);
+        log('dispatch', `get_document_section for "${args.sectionId}"`);
+        const section = contextIndex.documentSections.find((s) => s.id === args.sectionId);
+        if (!section) {
+          return { content: [{ type: 'text', text: `Section not found: ${args.sectionId}. Use section IDs from the document outline.` }], isError: true };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ sectionId: section.id, title: section.title, content: section.content, startLine: section.startLine, endLine: section.endLine }) }] };
+      }
+
+      case 'search_rules': {
+        if (!contextIndex) return noIndexError(log);
+        log('dispatch', `search_rules for "${args.query}"`);
+        const results = searchRules(contextIndex, args.query as string, args.maxResults as number | undefined);
+        return { content: [{ type: 'text', text: JSON.stringify({ results, totalRules: contextIndex.policyDefinition.rules.length }) }] };
+      }
+
+      case 'search_variables': {
+        if (!contextIndex) return noIndexError(log);
+        log('dispatch', `search_variables for "${args.query}"`);
+        const results = searchVariables(contextIndex, args.query as string, args.maxResults as number | undefined);
+        return { content: [{ type: 'text', text: JSON.stringify({ results, totalVariables: contextIndex.policyDefinition.variables.length }) }] };
+      }
+
+      case 'get_section_rules': {
+        if (!contextIndex) return noIndexError(log);
+        log('dispatch', `get_section_rules for "${args.sectionId}"`);
+        const result = getSectionRules(contextIndex, args.sectionId as string);
+        if (!result) {
+          return { content: [{ type: 'text', text: `Section not found: ${args.sectionId}. Use section IDs from the document outline.` }], isError: true };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+      }
+
+      case 'get_rule_details': {
+        if (!contextIndex) return noIndexError(log);
+        const ruleIds = args.ruleIds as string[];
+        log('dispatch', `get_rule_details for ${ruleIds.length} rule(s)`);
+        const results = getRuleDetails(contextIndex, ruleIds);
+        return { content: [{ type: 'text', text: JSON.stringify({ results, fidelityAvailable: contextIndex.hasFidelityEdges, fidelityStale: contextIndex.fidelityStale }) }] };
+      }
+
+      case 'get_variable_details': {
+        if (!contextIndex) return noIndexError(log);
+        const variableNames = args.variableNames as string[];
+        log('dispatch', `get_variable_details for ${variableNames.length} variable(s)`);
+        const results = getVariableDetails(contextIndex, variableNames);
+        return { content: [{ type: 'text', text: JSON.stringify({ results, fidelityAvailable: contextIndex.hasFidelityEdges, fidelityStale: contextIndex.fidelityStale }) }] };
+      }
+
+      case 'find_related_content': {
+        if (!contextIndex) return noIndexError(log);
+        log('dispatch', `find_related_content ruleId=${args.ruleId ?? 'none'} variableName=${args.variableName ?? 'none'} depth=${args.depth ?? 1}`);
+        const items = findRelatedContent(contextIndex, args.ruleId as string | undefined, args.variableName as string | undefined, args.depth as number | undefined);
+        return { content: [{ type: 'text', text: JSON.stringify({ items, fidelityAvailable: contextIndex.hasFidelityEdges, fidelityStale: contextIndex.fidelityStale }) }] };
+      }
+
+      default:
+        log('dispatch', `Unknown tool: ${toolName}`);
+        return {
+          content: [{ type: 'text', text: `Unknown tool: ${toolName}` }],
+          isError: true,
+        };
+    }
+      } catch (err) {
+        const errorMessage = (err as Error).message;
+        log('dispatch', `${toolName} error: ${errorMessage}`);
+
+        // For build failures, include the build log from the error
+        if (err instanceof BuildFailedError) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: errorMessage,
+                buildWorkflowId: (err as BuildFailedError).buildWorkflowId,
+                buildErrors: extractBuildErrors((err as BuildFailedError).buildLog),
+                buildLog: formatBuildLogSummary((err as BuildFailedError).buildLog),
+              }),
+            }],
+            isError: true,
+          };
+        }
+
+        // Re-throw so withRetry can handle throttling errors
+        throw err;
+      }
+  }, {
+    onRetry: (attempt, delay) => {
+      log('dispatch', `${toolName} throttled — retry ${attempt} in ${Math.round(delay / 1000)}s`);
+    },
+  }).catch((err) => {
+    // Final catch after retries exhausted (or non-retryable error)
+    const errorMessage = (err as Error).message;
+    log('dispatch', `${toolName} error (final): ${errorMessage}`);
+    return {
+      content: [{ type: 'text' as const, text: `Error: ${errorMessage}` }],
+      isError: true,
+    } as ToolCallResult;
+  });
+}

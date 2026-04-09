@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARchitect Debug Viewer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1b2a; --surface: #192534; --surface-hover: #1e2f42;
+    --border: #354150; --text: #d1d5db; --text-muted: #8d99a8;
+    --primary: #539fe5; --success: #29ad32; --error: #eb6f6f;
+    --warn: #e0a243; --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text); }
+  body { display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  .header { padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .header h1 { font-size: 16px; font-weight: 600; color: var(--primary); }
+  .header .meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .header .meta span { margin-right: 16px; }
+
+  /* ── Drop zone ── */
+  .dropzone {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    flex: 1; padding: 48px; text-align: center;
+  }
+  .dropzone.drag-over { background: var(--surface-hover); }
+  .dropzone h2 { font-size: 20px; font-weight: 500; margin-bottom: 12px; }
+  .dropzone p { color: var(--text-muted); margin-bottom: 20px; }
+  .dropzone input[type="file"] { display: none; }
+  .dropzone label {
+    display: inline-block; padding: 10px 24px; background: var(--primary);
+    color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  .dropzone label:hover { opacity: 0.9; }
+
+  /* ── Main content ── */
+  .content { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+  .content.visible { display: flex; }
+
+  /* ── State snapshot ── */
+  .snapshot { padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .snapshot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 8px; }
+  .snapshot-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+  .snapshot-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .snapshot-card .value { font-size: 14px; margin-top: 2px; }
+
+  /* ── Filters ── */
+  .filters { padding: 10px 24px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
+  .filter-btn {
+    padding: 4px 12px; border-radius: 14px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px;
+  }
+  .filter-btn:hover { border-color: var(--primary); color: var(--text); }
+  .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .filter-count { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+
+  /* ── Timeline ── */
+  .timeline { padding: 16px 0; }
+  .entry {
+    display: grid; grid-template-columns: 100px 180px 1fr;
+    border-bottom: 1px solid var(--border); padding: 8px 0; font-size: 13px;
+    cursor: pointer; transition: background 0.1s;
+  }
+  .entry:hover { background: var(--surface-hover); margin: 0 -12px; padding: 8px 12px; border-radius: 4px; }
+  .entry .time { color: var(--text-muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .entry .cat { font-weight: 500; }
+  .entry .preview { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .cat-app-start { color: var(--primary); }
+  .cat-ipc-request { color: #a78bfa; }
+  .cat-session-tool_call, .cat-session-tool_call_update { color: var(--warn); }
+  .cat-session-agent_message { color: var(--success); }
+  .cat-cli-stderr { color: var(--error); }
+  .cat-cli-exit { color: var(--error); }
+  .cat-debug-export { color: var(--text-muted); }
+
+  /* ── Detail panel ── */
+  .detail {
+    display: none; grid-column: 1 / -1; margin-top: 8px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; font-size: 12px; max-height: 400px; overflow-y: auto;
+  }
+  .detail.open { display: block; }
+  .detail pre { white-space: pre-wrap; word-break: break-word; color: var(--text); line-height: 1.5; }
+  .detail .message-text { color: var(--text); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .detail .tool-title { color: var(--warn); font-weight: 600; margin-bottom: 4px; }
+  .detail .tool-status { color: var(--text-muted); font-size: 11px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header" id="header">
+  <h1>ARchitect Debug Viewer</h1>
+  <div class="meta" id="headerMeta"></div>
+</div>
+
+<div class="dropzone" id="dropzone">
+  <h2>Load a debug export</h2>
+  <p>Drag and drop an ARchitect-debug-*.json file here, or click to browse.</p>
+  <label for="fileInput">Choose file</label>
+  <input type="file" id="fileInput" accept=".json">
+</div>
+
+<div class="content" id="content">
+  <div class="snapshot" id="snapshot"></div>
+  <div class="filters" id="filters"></div>
+  <div id="timeline" style="flex:1;overflow-y:auto;padding:0 24px 24px;"></div>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const content = document.getElementById('content');
+const headerMeta = document.getElementById('headerMeta');
+const snapshotEl = document.getElementById('snapshot');
+const filtersEl = document.getElementById('filters');
+const timelineEl = document.getElementById('timeline');
+
+let allEntries = [];
+let activeFilters = new Set();
+
+// ── File loading ──
+
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      renderDebugData(data);
+    } catch (err) {
+      alert('Failed to parse JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── Rendering ──
+
+function renderDebugData(data) {
+  dropzone.style.display = 'none';
+  content.classList.add('visible');
+
+  // Header meta
+  const app = data.app || {};
+  const exported = data.exportedAt ? new Date(data.exportedAt).toLocaleString() : 'unknown';
+  headerMeta.innerHTML = [
+    `<span>Exported: ${exported}</span>`,
+    `<span>v${app.version || '?'}</span>`,
+    `<span>${app.platform || '?'} / ${app.arch || '?'}</span>`,
+    `<span>Electron ${app.electronVersion || '?'}</span>`,
+  ].join('');
+
+  // State snapshot
+  const snap = data.stateSnapshot || {};
+  renderSnapshot(snap);
+
+  // Log entries
+  allEntries = data.recentLogs || [];
+  renderFilters();
+  renderTimeline();
+}
+
+function renderSnapshot(snap) {
+  const cards = [];
+  const add = (label, value) => cards.push(`<div class="snapshot-card"><div class="label">${label}</div><div class="value">${value}</div></div>`);
+
+  add('Policy', snap.policy?.name || 'None loaded');
+  if (snap.definition) {
+    add('Rules', snap.definition.ruleCount);
+    add('Variables', snap.definition.variableCount);
+  }
+  add('Tests', `${snap.testCases?.withResults || 0} / ${snap.testCases?.total || 0}`);
+  add('Source Doc', snap.sourceDocument?.loaded ? `${(snap.sourceDocument.lengthChars / 1024).toFixed(0)} KB` : 'Not loaded');
+  add('Build Assets', [
+    snap.buildAssets?.hasQualityReport && 'Quality',
+    snap.buildAssets?.hasFidelityReport && 'Fidelity',
+    snap.buildAssets?.hasScenarios && 'Scenarios',
+  ].filter(Boolean).join(', ') || 'None');
+  if (snap.localState?.hasSectionImports) {
+    add('Sections', snap.localState.sectionCount);
+  }
+  add('Context Index', snap.contextIndex?.loaded ? 'Loaded' : 'Not loaded');
+
+  snapshotEl.innerHTML = `<div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">State Snapshot</div><div class="snapshot-grid">${cards.join('')}</div>`;
+}
+
+function renderFilters() {
+  const counts = {};
+  for (const e of allEntries) {
+    const cat = friendlyCategory(e.category);
+    counts[cat] = (counts[cat] || 0) + 1;
+  }
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  let html = '';
+  for (const [cat, count] of sorted) {
+    html += `<button class="filter-btn active" data-cat="${cat}">${cat} (${count})</button>`;
+  }
+  html += `<span class="filter-count" id="visibleCount"></span>`;
+  filtersEl.innerHTML = html;
+
+  // All active by default
+  activeFilters = new Set(sorted.map(([c]) => c));
+
+  filtersEl.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = btn.dataset.cat;
+      if (activeFilters.has(cat)) {
+        activeFilters.delete(cat);
+        btn.classList.remove('active');
+      } else {
+        activeFilters.add(cat);
+        btn.classList.add('active');
+      }
+      renderTimeline();
+    });
+  });
+}
+
+function renderTimeline() {
+  const filtered = allEntries.filter(e => activeFilters.has(friendlyCategory(e.category)));
+  document.getElementById('visibleCount').textContent = `${filtered.length} / ${allEntries.length} entries`;
+
+  let html = '<div class="timeline">';
+  for (let i = 0; i < filtered.length; i++) {
+    const e = filtered[i];
+    const time = formatTime(e.timestamp);
+    const cat = friendlyCategory(e.category);
+    const catClass = 'cat-' + e.category.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const preview = entryPreview(e);
+
+    html += `<div class="entry" data-idx="${i}">`;
+    html += `<span class="time">${time}</span>`;
+    html += `<span class="cat ${catClass}">${cat}</span>`;
+    html += `<span class="preview">${escapeHtml(preview)}</span>`;
+    html += `<div class="detail" id="detail-${i}">${renderDetail(e)}</div>`;
+    html += `</div>`;
+  }
+  html += '</div>';
+  timelineEl.innerHTML = html;
+
+  // Toggle detail on click
+  timelineEl.querySelectorAll('.entry').forEach(el => {
+    el.addEventListener('click', () => {
+      const detail = el.querySelector('.detail');
+      detail.classList.toggle('open');
+    });
+  });
+}
+
+// ── Helpers ──
+
+function friendlyCategory(cat) {
+  const map = {
+    'app-start': 'App Start',
+    'ipc-request': 'IPC Request',
+    'session-tool_call': 'Tool Call',
+    'session-tool_call_update': 'Tool Update',
+    'session-agent_message': 'Agent Message',
+    'session-agent_message_chunk': 'Message Chunk',
+    'cli-stderr': 'CLI Error',
+    'cli-exit': 'CLI Exit',
+    'debug-export': 'Debug Export',
+  };
+  return map[cat] || cat;
+}
+
+function formatTime(ts) {
+  if (!ts) return '--:--:--';
+  return ts.slice(11, 23); // HH:MM:SS.mmm
+}
+
+function entryPreview(e) {
+  const d = e.data || {};
+  switch (e.category) {
+    case 'app-start': return `v${d.version} (${d.platform})`;
+    case 'ipc-request': return d.channel + (d.promptLength ? ` (${d.promptLength} chars)` : '');
+    case 'session-tool_call': return `${d.title || 'unknown'} [${d.status || ''}]`;
+    case 'session-tool_call_update': return `${d.title || 'unknown'} [${d.status || ''}]`;
+    case 'session-agent_message': {
+      const text = d.text || '';
+      return text.length > 120 ? text.slice(0, 120) + '…' : text;
+    }
+    case 'cli-stderr': return d.message || '';
+    case 'cli-exit': return `exit code ${d.code}`;
+    case 'debug-export': return d.filePath || '';
+    default: return JSON.stringify(d).slice(0, 100);
+  }
+}
+
+function renderDetail(e) {
+  const d = e.data || {};
+  switch (e.category) {
+    case 'session-agent_message':
+      return `<div class="message-text">${escapeHtml(d.text || '')}</div>`;
+    case 'session-tool_call':
+    case 'session-tool_call_update': {
+      let html = `<div class="tool-title">${escapeHtml(d.title || 'unknown')}</div>`;
+      html += `<div class="tool-status">Status: ${d.status || '?'} &nbsp; ID: ${d.toolCallId || '?'}</div>`;
+      const input = d.rawInput || d.input || d.arguments;
+      if (input) {
+        html += `<pre>${escapeHtml(typeof input === 'string' ? input : JSON.stringify(input, null, 2))}</pre>`;
+      }
+      const content = d.content;
+      if (content) {
+        const str = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+        html += `<pre>${escapeHtml(str.length > 3000 ? str.slice(0, 3000) + '\n… truncated' : str)}</pre>`;
+      }
+      return html;
+    }
+    default:
+      return `<pre>${escapeHtml(JSON.stringify(d, null, 2))}</pre>`;
+  }
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
