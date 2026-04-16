@@ -12,6 +12,7 @@ const config: ForgeConfig = {
       unpack: "mcp-server.js",
     },
     name: "ARchitect",
+    executableName: "ARchitect",
     icon: "./icon/ARchitect",
     extraResource: ["./icon"],
   },
