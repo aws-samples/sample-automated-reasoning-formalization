@@ -20,8 +20,8 @@ const config: ForgeConfig = {
   makers: [
     new MakerSquirrel({}),
     new MakerZIP({}, ["darwin"]),
-    new MakerDeb({}),
-    new MakerRpm({}),
+    new MakerDeb({ options: { bin: "ARchitect" } }),
+    new MakerRpm({ options: { bin: "ARchitect" } }),
   ],
   plugins: [
     new WebpackPlugin({
