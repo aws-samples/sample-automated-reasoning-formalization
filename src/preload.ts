@@ -63,8 +63,8 @@ const api: ArchitectAPI = {
   // ── ACP (Kiro CLI) ──
   acpStart: (cwd?: string): Promise<void> =>
     ipcRenderer.invoke("acp:start", cwd),
-  acpCreateSession: (cwd?: string, systemPrompt?: string, mcpServers?: { name: string; command: string; args: string[]; env?: Record<string, string> }[]): Promise<string> =>
-    ipcRenderer.invoke("acp:createSession", cwd, systemPrompt, mcpServers),
+  acpCreateSession: (cwd?: string, systemPrompt?: string, mcpServers?: { name: string; command: string; args: string[]; env?: Record<string, string> }[], modelId?: string): Promise<string> =>
+    ipcRenderer.invoke("acp:createSession", cwd, systemPrompt, mcpServers, modelId),
   acpSendPrompt: (text: string, sessionId?: string): Promise<{ stopReason: string }> =>
     ipcRenderer.invoke("acp:sendPrompt", text, sessionId),
   acpCancel: (sessionId?: string): void =>

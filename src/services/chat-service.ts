@@ -25,6 +25,8 @@ export interface ChatServiceConfig {
   transport?: AcpTransport;
   /** MCP server configurations to register with the ACP session. */
   mcpServers?: import("./acp-transport").McpServerConfig[];
+  /** Model ID to use for the session. Defaults to "claude-opus-4.6". */
+  modelId?: string;
 }
 
 export class ChatService {
@@ -103,6 +105,7 @@ export class ChatService {
       this.config.cwd,
       this.systemPrompt,
       this.config.mcpServers,
+      this.config.modelId,
     );
     console.log("[ChatService.connect] Session created:", this.sessionId);
     this.connected = true;

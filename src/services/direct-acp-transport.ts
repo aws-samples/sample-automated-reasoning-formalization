@@ -33,15 +33,15 @@ export class DirectAcpTransport implements AcpTransport {
     await this.client.start(cliPath, workDir);
   }
 
-  async createSession(cwd?: string, systemPrompt?: string, mcpServers?: McpServerConfig[]): Promise<string> {
-      const workDir = cwd ?? this.config.cwd ?? process.cwd();
-      return this.client.createSession(workDir, systemPrompt, mcpServers?.map(s => ({
-        name: s.name,
-        command: s.command,
-        args: s.args,
-        env: s.env,
-      })));
-    }
+  async createSession(cwd?: string, systemPrompt?: string, mcpServers?: McpServerConfig[], modelId?: string): Promise<string> {
+    const workDir = cwd ?? this.config.cwd ?? process.cwd();
+    return this.client.createSession(workDir, systemPrompt, mcpServers?.map(s => ({
+      name: s.name,
+      command: s.command,
+      args: s.args,
+      env: s.env,
+    })), modelId);
+  }
 
   async sendPrompt(text: string, sessionId?: string): Promise<{ stopReason: string }> {
     if (sessionId) {

@@ -57,6 +57,7 @@ export interface ArchitectAPI {
     cwd?: string,
     systemPrompt?: string,
     mcpServers?: { name: string; command: string; args: string[]; env?: Record<string, string> }[],
+    modelId?: string,
   ) => Promise<string>;
   acpSendPrompt: (text: string, sessionId?: string) => Promise<{ stopReason: string }>;
   acpCancel: (sessionId?: string) => void;

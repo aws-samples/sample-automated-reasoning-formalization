@@ -605,10 +605,11 @@ ipcMain.handle("acp:start", async (_event, cwd?: string) => {
   }
 });
 
-ipcMain.handle("acp:createSession", async (_event, cwd?: string, systemPrompt?: string, mcpServers?: { name: string; command: string; args: string[]; env?: Record<string, string> }[]) => {
+ipcMain.handle("acp:createSession", async (_event, cwd?: string, systemPrompt?: string, mcpServers?: { name: string; command: string; args: string[]; env?: Record<string, string> }[], modelId?: string) => {
   debugLogger.logEvent("ipc-request", {
     channel: "acp:createSession",
     cwd,
+    modelId,
     mcpServerCount: mcpServers?.length ?? 0,
     mcpServers: mcpServers?.map(s => ({
       name: s.name,
@@ -619,9 +620,11 @@ ipcMain.handle("acp:createSession", async (_event, cwd?: string, systemPrompt?: 
   });
   if (!acpClient?.isConnected) throw new Error("ACP client not started");
   const workDir = cwd ?? app.getPath("home");
+  // Use modelId from IPC call, fall back to env var, then default
+  const effectiveModel = modelId ?? process.env.ARCHITECT_MODEL;
   try {
-    const sessionId = await acpClient.createSession(workDir, systemPrompt, mcpServers);
-    debugLogger.logEvent("acp-session-created", { sessionId, mcpServerCount: mcpServers?.length ?? 0 });
+    const sessionId = await acpClient.createSession(workDir, systemPrompt, mcpServers, effectiveModel);
+    debugLogger.logEvent("acp-session-created", { sessionId, modelId: effectiveModel, mcpServerCount: mcpServers?.length ?? 0 });
     return sessionId;
   } catch (err) {
     debugLogger.logEvent("acp-session-failed", {
