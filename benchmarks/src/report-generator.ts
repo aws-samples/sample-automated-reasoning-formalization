@@ -225,10 +225,10 @@ ${CSS}
 
 <h1>Agent Benchmark Report</h1>
 <div class="subtitle">
-  Run: ${esc(r.startTime)} &nbsp;·&nbsp; Fixture: ${esc(r.fixture)} &nbsp;·&nbsp; Max iterations: ${r.config.maxIterations} &nbsp;·&nbsp; Region: ${esc(r.config.region)}
+  Run: ${esc(r.startTime)} &nbsp;·&nbsp; Fixture: ${esc(r.fixture)} &nbsp;·&nbsp; Model: <strong>${esc(r.config.modelId)}</strong> &nbsp;·&nbsp; Max iterations: ${r.config.maxIterations} &nbsp;·&nbsp; Region: ${esc(r.config.region)}
 </div>
 
-${buildSummaryCards(s, d, j, passColor, judgeColor, toolDetail)}
+${buildSummaryCards(r, s, d, j, passColor, judgeColor, toolDetail)}
 ${buildChartSection(s, d)}
 ${buildIterationLog(s)}
 ${buildContextRetrievals(s)}
@@ -244,6 +244,7 @@ ${buildChartScript(s, d)}
 // ── Summary Cards ──
 
 function buildSummaryCards(
+  r: BenchmarkReport,
   s: BenchmarkReport["session"],
   d: BenchmarkReport["deterministicEval"],
   j: BenchmarkReport["judgeEval"],
@@ -253,6 +254,11 @@ function buildSummaryCards(
 ): string {
   return `
 <div class="summary-grid">
+  <div class="summary-card">
+    <div class="label">Model</div>
+    <div class="value" style="font-size:1.25rem">${esc(s.converged ? "✓" : "⟳")} ${esc(r.config.modelId)}</div>
+    <div class="detail">Kiro CLI ${esc(r.environment.kiroCliVersion)}</div>
+  </div>
   <div class="summary-card">
     <div class="label">Tests Passing</div>
     <div class="value ${passColor}">${s.finalPassCount} / ${s.totalTests}</div>

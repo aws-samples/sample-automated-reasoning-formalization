@@ -145,4 +145,5 @@ export interface BenchmarkConfig {
   globalTimeoutMs: number;
   skipJudge: boolean;
   region: string;
+  modelId: string;
 }
