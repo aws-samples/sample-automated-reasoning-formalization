@@ -70,6 +70,9 @@ export interface ProtocolLogEntry {
   message: unknown;
 }
 
+/** Default model ID used for ACP sessions when none is explicitly specified. */
+export const DEFAULT_MODEL_ID = "claude-opus-4.6";
+
 export class AcpClient extends EventEmitter {
   private process: ChildProcess | null = null;
   private nextId = 0;
@@ -174,11 +177,13 @@ export class AcpClient extends EventEmitter {
    * @param cwd Working directory for the session.
    * @param systemPrompt Optional system prompt that configures agent behavior for the session.
    * @param mcpServers Optional MCP server configurations to register with the session.
+   * @param modelId Model to use for the session. Defaults to "claude-opus-4.6".
    */
   async createSession(
     cwd: string,
     systemPrompt?: string,
     mcpServers?: { name: string; command: string; args: string[]; env?: Record<string, string> }[],
+    modelId?: string,
   ): Promise<string> {
     if (!this.initialized) throw new Error("ACP client not initialized");
 
@@ -205,8 +210,9 @@ export class AcpClient extends EventEmitter {
     this.sessionId = result.sessionId;
     this.sessions.add(result.sessionId);
 
-    // Switch to Opus 4.6 model for the session
-    await this.setModel(result.sessionId, "claude-opus-4.6");
+    // Set the model for the session (defaults to Opus 4.6)
+    const effectiveModel = modelId ?? DEFAULT_MODEL_ID;
+    await this.setModel(result.sessionId, effectiveModel);
 
     return result.sessionId;
   }

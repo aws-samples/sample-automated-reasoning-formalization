@@ -18,6 +18,7 @@ import { buildTestSystemPrompt } from "../../src/prompts/test-system-prompt";
 import { buildTestAnalysisPrompt } from "../../src/utils/test-analysis";
 import { writeApprovalCode } from "../../src/services/approval-code-store";
 import { resolveKiroCliPath } from "../../src/utils/cli-resolve";
+import { withRetry } from "../../src/utils/retry";
 import type { AcpSessionUpdate, ProposalCard, TestCaseWithResult } from "../../src/types";
 import { toAppDefinition } from "../../src/utils/policy-definition";
 import {
@@ -43,6 +44,7 @@ interface AgentLoopConfig {
   mcpServerConfig: { name: string; command: string; args: string[]; env: Record<string, string> };
   log: (msg: string) => void;
   abortSignal: AbortSignal;
+  modelId?: string;
 }
 
 /**
@@ -55,7 +57,7 @@ export async function runAgentLoop(
   fixture: BenchmarkFixture,
   config: AgentLoopConfig,
 ): Promise<RepairSession> {
-  const { maxIterations, approvalCodeFilePath, mcpServerConfig, log, abortSignal } = config;
+  const { maxIterations, approvalCodeFilePath, mcpServerConfig, log, abortSignal, modelId } = config;
   const iterations: RepairIteration[] = [];
   const startTime = Date.now();
 
@@ -115,7 +117,7 @@ export async function runAgentLoop(
     let prompt = "";
 
     // Create a fresh test-agent session for this test
-    const testChatService = await createAgentSession(mcpServerConfig, buildTestSystemPrompt());
+    const testChatService = await createAgentSession(mcpServerConfig, buildTestSystemPrompt(), modelId);
     try {
       // Build the test context (same shape as the app's test chat)
       const testCaseWithResult = await buildTestCaseWithResult(
@@ -355,16 +357,39 @@ function filterActionableCards(
 
 // ── Helpers ──
 
+/**
+ * Determines if a test workflow start error is retryable.
+ * Handles both throttling ("Too many requests") and workflow-in-progress
+ * ("Testing workflow is currently in progress") errors.
+ */
+function isTestWorkflowRetryable(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message ?? "";
+  const name = (err as { name?: string }).name ?? "";
+  return (
+    name === "ThrottlingException" ||
+    name === "TooManyRequestsException" ||
+    name === "ConflictException" ||
+    msg.includes("Too many requests") ||
+    msg.includes("ThrottlingException") ||
+    msg.includes("Rate exceeded") ||
+    msg.includes("Throttling") ||
+    msg.includes("workflow is currently in progress") ||
+    msg.includes("currently in progress")
+  );
+}
+
 async function createAgentSession(
   mcpServerConfig: AgentLoopConfig["mcpServerConfig"],
   systemPrompt: string,
+  modelId?: string,
 ): Promise<ChatService> {
   const transport = new DirectAcpTransport({
     cliPath: resolveKiroCliPath(),
     cwd: process.cwd(),
     debug: false,
   });
-  const chatService = new ChatService({ transport });
+  const chatService = new ChatService({ transport, modelId });
   chatService.setMcpServers([mcpServerConfig]);
   await chatService.connect(systemPrompt);
   return chatService;
@@ -556,8 +581,21 @@ async function runAllTests(
     }
 
     try {
-      const result = await policyService.executeTestCase(
-        policy.policyArn, latestBuild.buildWorkflowId, tcId,
+      // Start and poll a single test workflow with retry for throttling
+      // and "workflow in progress" errors.
+      const result = await withRetry(
+        () => policyService.executeTestCase(
+          policy.policyArn, latestBuild.buildWorkflowId, tcId,
+        ),
+        {
+          maxRetries: 6,
+          baseDelayMs: 3_000,
+          maxDelayMs: 60_000,
+          isRetryable: isTestWorkflowRetryable,
+          onRetry: (attempt, delayMs) => {
+            log(`  ⏳ ${fixtureTestId}: retrying (attempt ${attempt}, waited ${Math.round(delayMs / 1000)}s)…`);
+          },
+        },
       );
       const actual = result.aggregatedTestFindingsResult ?? "UNKNOWN";
       const expected = result.testCase?.expectedAggregatedFindingsResult ?? "UNKNOWN";

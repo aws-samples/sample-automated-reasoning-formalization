@@ -25,7 +25,7 @@ export interface McpServerConfig {
  */
 export interface AcpTransport {
   start(cwd?: string): Promise<void>;
-  createSession(cwd?: string, systemPrompt?: string, mcpServers?: McpServerConfig[]): Promise<string>;
+  createSession(cwd?: string, systemPrompt?: string, mcpServers?: McpServerConfig[], modelId?: string): Promise<string>;
   sendPrompt(text: string, sessionId?: string): Promise<{ stopReason: string }>;
   cancel(sessionId?: string): void;
   stop(): void;
@@ -40,8 +40,8 @@ export class IpcAcpTransport implements AcpTransport {
   start(cwd?: string): Promise<void> {
     return window.architect.acpStart(cwd);
   }
-  createSession(cwd?: string, systemPrompt?: string, mcpServers?: McpServerConfig[]): Promise<string> {
-    return window.architect.acpCreateSession(cwd, systemPrompt, mcpServers);
+  createSession(cwd?: string, systemPrompt?: string, mcpServers?: McpServerConfig[], modelId?: string): Promise<string> {
+    return window.architect.acpCreateSession(cwd, systemPrompt, mcpServers, modelId);
   }
   sendPrompt(text: string, sessionId?: string): Promise<{ stopReason: string }> {
     return window.architect.acpSendPrompt(text, sessionId);

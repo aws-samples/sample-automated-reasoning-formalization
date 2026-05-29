@@ -43,7 +43,7 @@ describe("ChatService + AcpTransport", () => {
 
       expect(transport.start).toHaveBeenCalledTimes(1);
       expect(transport.createSession).toHaveBeenCalledWith(
-        undefined, "system prompt", undefined,
+        undefined, "system prompt", undefined, undefined,
       );
       // Second connect should be a no-op
       await service.connect();

@@ -4,6 +4,7 @@
  *
  * Usage:
  *   npm run benchmark
+ *   npm run benchmark -- --model claude-opus-4.8
  *   BENCHMARK_MAX_ITERATIONS=10 npm run benchmark
  *   BENCHMARK_SKIP_JUDGE=1 npm run benchmark
  *
@@ -16,6 +17,7 @@ import * as path from "path";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { PolicyService } from "../../src/services/policy-service";
 import { resolveKiroCliPath } from "../../src/utils/cli-resolve";
+import { DEFAULT_MODEL_ID } from "../../src/services/acp-client";
 import { createBenchmarkPolicy } from "./policy-harness";
 import { runAgentLoop } from "./agent-loop";
 import { computeDeterministicEvaluation, evaluateWithJudge } from "./evaluation";
@@ -30,6 +32,7 @@ const config: BenchmarkConfig = {
   globalTimeoutMs: 3_600_000,
   skipJudge: process.env.BENCHMARK_SKIP_JUDGE === "1",
   region: process.env.AWS_REGION ?? "us-west-2",
+  modelId: process.env.ARCHITECT_MODEL ?? DEFAULT_MODEL_ID,
 };
 
 const reportDir = process.env.BENCHMARK_REPORT_DIR ?? path.join(__dirname, "..", "reports");
@@ -53,6 +56,8 @@ function parseCliArgs(): { fixtureOverrides: FixtureOverrides | null } {
       documentPath = args[++i];
     } else if (args[i] === "--tests" && args[i + 1]) {
       testsPath = args[++i];
+    } else if (args[i] === "--model" && args[i + 1]) {
+      config.modelId = args[++i];
     }
   }
 
@@ -140,7 +145,7 @@ async function main(): Promise<void> {
   const { fixtureOverrides } = parseCliArgs();
 
   log("Starting agent benchmark…");
-  log(`Config: maxIterations=${config.maxIterations}, skipJudge=${config.skipJudge}, region=${config.region}`);
+  log(`Config: maxIterations=${config.maxIterations}, skipJudge=${config.skipJudge}, region=${config.region}, model=${config.modelId}`);
   if (fixtureOverrides) {
     log(`Custom fixtures: definition=${fixtureOverrides.definitionPath}, document=${fixtureOverrides.documentPath}, tests=${fixtureOverrides.testsPath}`);
   }
@@ -212,7 +217,7 @@ async function main(): Promise<void> {
     const loopStart = Date.now();
     const session = await runAgentLoop(
       policyService, harness, fixture,
-      { maxIterations, approvalCodeFilePath, mcpServerConfig, log, abortSignal: abortController.signal },
+      { maxIterations, approvalCodeFilePath, mcpServerConfig, log, abortSignal: abortController.signal, modelId: config.modelId },
     );
     timing.agentLoopMs = Date.now() - loopStart;
     log(`Agent loop complete in ${Math.round(timing.agentLoopMs / 1000)}s. Converged: ${session.converged}`);
