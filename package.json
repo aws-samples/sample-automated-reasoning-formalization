@@ -33,7 +33,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitest/coverage-v8": "^4.0.18",
     "css-loader": "^7.1.2",
-    "electron": "^40.6.1",
+    "electron": "^41.10.3",
     "fast-check": "^4.5.3",
     "jsdom": "^27.0.1",
     "mini-css-extract-plugin": "^2.10.2",
